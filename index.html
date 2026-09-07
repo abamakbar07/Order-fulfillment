@@ -2,39 +2,126 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RF Scanner - HMS Operations</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HMS Warehouse RF Scanner</title>
+  
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-  <div class="container">
-    <!-- TOP BAR -->
-    <div class="card" style="padding: 10px 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: bold; color: #2c5282;">📱 RF Scanner Terminal</span>
-        <a href="admin.html" class="nav-link">⚙️ Admin Portal &rarr;</a>
+  <!-- CONFIG & PO SELECTION CARD -->
+  <div class="card">
+    <div class="header-title">
+      <span>Warehouse RF Scanner</span>
+      <div>
+        <button id="btnOpenLogs" class="btn btn-info btn-sm" style="display:none;">📋 Log</button>
+        <button id="btnCopyWA" class="btn btn-whatsapp btn-sm" style="display:none;">📱 Copy WA</button>
+        <a href="admin.html" class="nav-link" style="margin-left: 8px;">⚙️ Admin</a>
       </div>
     </div>
 
-    <!-- FEEDBACK BANNER -->
-    <div id="statusBanner" class="banner"></div>
-
-    <!-- SCANNER INPUT CARD -->
-    <div class="card">
-      <div class="header-title">
-        <span>Scan Material / Barcode</span>
+    <!-- FILTER BERTINGKAT (WEEK -> TANGGAL -> RIT) -->
+    <div class="form-row">
+      <div class="form-group">
+        <label for="weekSelect">1. Week:</label>
+        <select id="weekSelect"><option value="">- Week -</option></select>
       </div>
-      <div style="margin-top: 10px;">
-        <input 
-          type="text" 
-          id="barcodeInput" 
-          placeholder="Arahkan RF Gun / Ketik Lot Code..." 
-          style="width: 100%; padding: 12px; font-size: 16px; border: 2px solid #3182ce; border-radius: 6px; outline: none;" 
-          autofocus
-        />
+      <div class="form-group">
+        <label for="dateSelect">2. Tanggal:</label>
+        <select id="dateSelect" disabled><option value="">- Date -</option></select>
+      </div>
+      <div class="form-group">
+        <label for="ritSelect">3. Rit/Time:</label>
+        <select id="ritSelect" disabled><option value="">- Rit -</option></select>
+      </div>
+    </div>
+    
+    <div class="form-group" style="margin-top: 4px;">
+      <label for="poSelect">
+        4. Target PO: 
+        <span class="toggle-manual" id="btnToggleManual">Input Manual PO?</span>
+      </label>
+      <select id="poSelect" disabled><option value="">-- Pilih Filter Di Atas --</option></select>
+      <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
+    </div>
+    
+    <!-- PO SUMMARY AREA -->
+    <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
+      <div><strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Time:</strong> <span id="lblTime">-</span></div>
+      <div style="margin-top: 4px;">
+        <strong>Progress PO:</strong> <span id="lblProgressText">0 / 0 CT</span>
+        <div class="progress-bar-bg">
+          <div id="progressBar" class="progress-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCANNER INPUT AREA -->
+  <div class="scan-container">
+    <label for="barcodeInput" style="color: #2b6cb0;">TEMBAK BARCODE (31 CHARS):</label>
+    <input type="text" id="barcodeInput" class="scan-input" autofocus autocomplete="off" placeholder="Scan Serial Number..." />
+  </div>
+
+  <!-- FEEDBACK BANNER -->
+  <div id="feedbackBanner" class="feedback-banner"></div>
+
+  <!-- LOT PROGRESS LIST CARD -->
+  <div class="card">
+    <div class="header-title" style="font-size: 13px;">Target Lot Progress</div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>LOT</th>
+            <th>TARGET</th>
+            <th>SCANNED</th>
+            <th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="lotTableBody">
+          <tr><td colspan="4" style="text-align:center; color:#a0aec0;">Pilih PO untuk menampilkan LOT</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MODAL SOFT WARNING (BYPASS DUPLICATE) -->
+  <div id="modalBypass" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title" style="color: #c05621;">⚠️ DUPLICATE SN DETECTED</div>
+      <div id="modalBodyText" style="font-size: 14px; color: #4a5568; margin-bottom: 15px;">
+        Serial Number ini sudah pernah di-scan pada PO lain.
+      </div>
+      <div class="btn-group">
+        <button id="btnCancelScan" class="btn btn-cancel">BATAL (ESC)</button>
+        <button id="btnBypassScan" class="btn btn-bypass">BYPASS (ENTER)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MANAGE SCAN LOGS (DELETE / UNDO SCAN) -->
+  <div id="modalLogs" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>Log Scan PO: <span id="modalPoNum"></span></span>
+        <button id="btnCloseLogs" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <table>
+          <thead>
+            <tr>
+              <th>LOT</th>
+              <th>SN (Last 8)</th>
+              <th>KG</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody">
+            <tr><td colspan="4" style="text-align:center;">Loading logs...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
