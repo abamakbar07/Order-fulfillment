@@ -1,0 +1,148 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background-color: #f4f6f9;
+  padding: 15px;
+  color: #333;
+  font-size: 14px;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #1a365d;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Dropzone Styles */
+.dropzone {
+  border: 2px dashed #3182ce;
+  border-radius: 8px;
+  padding: 25px;
+  text-align: center;
+  background-color: #ebf8ff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.dropzone:hover {
+  background-color: #e2e8f0;
+}
+
+.dropzone p {
+  color: #2b6cb0;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.dropzone span {
+  font-size: 12px;
+  color: #718096;
+}
+
+/* Feedback Banner */
+.banner {
+  padding: 10px;
+  border-radius: 6px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 12px;
+  display: none;
+}
+
+.banner-success {
+  background-color: #c6f6d5;
+  color: #22543d;
+  border: 1px solid #9ae6b4;
+}
+
+.banner-error {
+  background-color: #fed7d7;
+  color: #742a2a;
+  border: 1px solid #feb2b2;
+}
+
+/* Table Styles */
+.table-container {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th, td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #edf2f7;
+}
+
+th {
+  background-color: #edf2f7;
+  color: #2d3748;
+  position: sticky;
+  top: 0;
+}
+
+/* Buttons & Links */
+.btn {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn-primary { background: #3182ce; color: #fff; }
+.btn-success { background: #38a169; color: #fff; }
+.btn-danger { background: #e53e3e; color: #fff; }
+.btn-secondary { background: #e2e8f0; color: #4a5568; }
+
+.nav-link {
+  color: #3182ce;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+}

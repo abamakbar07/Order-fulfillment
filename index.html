@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RF Scanner - HMS Operations</title>
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div class="container">
+    <!-- TOP BAR -->
+    <div class="card" style="padding: 10px 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: bold; color: #2c5282;">📱 RF Scanner Terminal</span>
+        <a href="admin.html" class="nav-link">⚙️ Admin Portal &rarr;</a>
+      </div>
+    </div>
+
+    <!-- FEEDBACK BANNER -->
+    <div id="statusBanner" class="banner"></div>
+
+    <!-- SCANNER INPUT CARD -->
+    <div class="card">
+      <div class="header-title">
+        <span>Scan Material / Barcode</span>
+      </div>
+      <div style="margin-top: 10px;">
+        <input 
+          type="text" 
+          id="barcodeInput" 
+          placeholder="Arahkan RF Gun / Ketik Lot Code..." 
+          style="width: 100%; padding: 12px; font-size: 16px; border: 2px solid #3182ce; border-radius: 6px; outline: none;" 
+          autofocus
+        />
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

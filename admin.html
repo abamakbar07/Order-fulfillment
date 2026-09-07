@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - HMS Order Import & Management</title>
+  
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <!-- TOP BAR -->
+    <div class="card" style="padding: 10px 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: bold; color: #2c5282;">⚙️ HMS Admin Portal</span>
+        <a href="index.html" class="nav-link">📱 Buka RF Scanner App &rarr;</a>
+      </div>
+    </div>
+
+    <!-- FEEDBACK BANNER -->
+    <div id="statusBanner" class="banner"></div>
+
+    <!-- IMPORT SECTION -->
+    <div class="card">
+      <div class="header-title">
+        <span>1. Import Data Order (Excel / CSV)</span>
+        <button id="btnSaveToDb" class="btn btn-success" style="display:none;">💾 Simpan ke Database</button>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <p>📁 Klik atau Drag & Drop File Excel/CSV di sini</p>
+        <span>Format support: .xlsx, .xls, .csv</span>
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
+      </div>
+
+      <!-- PREVIEW TABLE -->
+      <div id="previewArea" style="display: none; margin-top: 15px;">
+        <div style="font-weight: bold; color: #4a5568; margin-bottom: 5px;">
+          Preview Data Draft (<span id="draftCount">0</span> rows):
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>PO Number</th>
+                <th>Blend</th>
+                <th>Lot Code</th>
+                <th>Qty Usage (CT)</th>
+                <th>Arrival Date</th>
+                <th>Arrival Time</th>
+              </tr>
+            </thead>
+            <tbody id="previewTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MASTER DATA PO TABLE -->
+    <div class="card">
+      <div class="header-title">
+        <span>2. Master Data Order & Lot Terdaftar</span>
+        <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>PO Number</th>
+              <th>Blend</th>
+              <th>Arrival Date</th>
+              <th>Arrival Time</th>
+              <th>Total Lot</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="masterPoTbody">
+            <tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
