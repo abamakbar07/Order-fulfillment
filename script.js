@@ -642,12 +642,55 @@ function parseExcelTime(val) {
   return String(val);
 }
 
+// 1. Helper Konversi Serial Date Excel (contoh: 46265 -> "2026-09-08")
+function parseExcelDate(val) {
+  if (!val && val !== 0) return new Date().toISOString().split('T')[0];
+
+  // Jika sudah berformat string "YYYY-MM-DD" atau "YYYY/MM/DD"
+  if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) {
+    return val.replace(/\//g, '-');
+  }
+
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 10000) {
+    // Offset Epoch Excel (30 Des 1899)
+    const utcDays = num - 25569;
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+
+  return String(val);
+}
+
+// 2. Helper Konversi Fraction Time Excel (contoh: 0.25 -> "06:00:00")
+function parseExcelTime(val) {
+  if (!val && val !== 0) return '06:00:00';
+
+  // Jika sudah berformat jam "HH:mm" atau "HH:mm:ss"
+  if (typeof val === 'string' && val.includes(':')) {
+    return val.length === 5 ? `${val}:00` : val;
+  }
+
+  const num = parseFloat(val);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    const totalSeconds = Math.round(num * 86400);
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  return String(val);
+}
+
+// 3. Update bagian mapping di function processExcelRows()
 function processExcelRows(rawRows) {
   parsedData = [];
   rawRows.forEach(row => {
     const getVal = (keys) => {
       for (let k of keys) {
         const foundKey = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
         if (foundKey && row[foundKey] !== undefined) return row[foundKey];
       }
       return '';
@@ -679,6 +722,15 @@ function processExcelRows(rawRows) {
       });
     }
   });
+
+  if (parsedData.length === 0) {
+    showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
+    return;
+  }
+
+  renderPreviewTable();
+  showFeedback(`✅ Berhasil membaca ${parsedData.length} baris data.`, 'success');
+}
 
   if (parsedData.length === 0) {
     showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
