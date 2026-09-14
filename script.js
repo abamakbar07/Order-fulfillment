@@ -708,6 +708,14 @@ function processExcelRows(rawRows) {
     // Konversi otomatis ke format standar ISO Supabase
     const arrivalDate = parseExcelDate(rawDate);
     const arrivalTime = parseExcelTime(rawTime);
+    
+    // // Tangkap data mentah (bisa berupa angka serial / fraction)
+    // const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
+    // const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
+
+    // // Konversi otomatis ke format standar ISO Supabase
+    // const arrivalDate = parseExcelDate(rawDate);
+    // const arrivalTime = parseExcelTime(rawTime);
 
     if (poNumber && lotCode) {
       parsedData.push({
@@ -722,15 +730,6 @@ function processExcelRows(rawRows) {
       });
     }
   });
-
-  if (parsedData.length === 0) {
-    showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
-    return;
-  }
-
-  renderPreviewTable();
-  showFeedback(`✅ Berhasil membaca ${parsedData.length} baris data.`, 'success');
-}
 
   if (parsedData.length === 0) {
     showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
