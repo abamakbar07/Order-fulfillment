@@ -601,23 +601,70 @@ function handleFileSelect(file) {
   reader.readAsArrayBuffer(file);
 }
 
+// 1. Helper Konversi Serial Date Excel (contoh: 46265 -> "2026-09-08")
+function parseExcelDate(val) {
+  if (!val && val !== 0) return new Date().toISOString().split('T')[0];
+
+  // Jika sudah berformat string "YYYY-MM-DD" atau "YYYY/MM/DD"
+  if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) {
+    return val.replace(/\//g, '-');
+  }
+
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 10000) {
+    // Offset Epoch Excel (30 Des 1899)
+    const utcDays = num - 25569;
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+
+  return String(val);
+}
+
+// 2. Helper Konversi Fraction Time Excel (contoh: 0.25 -> "06:00:00")
+function parseExcelTime(val) {
+  if (!val && val !== 0) return '06:00:00';
+
+  // Jika sudah berformat jam "HH:mm" atau "HH:mm:ss"
+  if (typeof val === 'string' && val.includes(':')) {
+    return val.length === 5 ? `${val}:00` : val;
+  }
+
+  const num = parseFloat(val);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    const totalSeconds = Math.round(num * 86400);
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  return String(val);
+}
+
 function processExcelRows(rawRows) {
   parsedData = [];
   rawRows.forEach(row => {
     const getVal = (keys) => {
       for (let k of keys) {
         const foundKey = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-        if (foundKey && row[foundKey] !== undefined) return String(row[foundKey]).trim();
+        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
       }
       return '';
     };
 
-    const poNumber = getVal(['po_number', 'po number', 'po', 'no po']);
-    const blendCode = getVal(['blend_code', 'blend code', 'blend']);
-    const lotCode = getVal(['lot_code', 'lot code', 'lot']);
+    const poNumber = String(getVal(['po_number', 'po number', 'po', 'no po'])).trim();
+    const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim();
+    const lotCode = String(getVal(['lot_code', 'lot code', 'lot'])).trim();
     const qtyUsage = parseFloat(getVal(['qty_usage_ct', 'qty usage', 'qty ct', 'qty', 'carton'])) || 1.0;
-    const arrivalDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']) || new Date().toISOString().split('T')[0];
-    const arrivalTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']) || '06:00:00';
+    
+    // Tangkap data mentah (bisa berupa angka serial / fraction)
+    const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
+    const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
+
+    // Konversi otomatis ke format standar ISO Supabase
+    const arrivalDate = parseExcelDate(rawDate);
+    const arrivalTime = parseExcelTime(rawTime);
 
     if (poNumber && lotCode) {
       parsedData.push({
@@ -628,7 +675,7 @@ function processExcelRows(rawRows) {
         qty_spare_ct: qtyUsage,
         uom: 'CT',
         arrival_date: arrivalDate,
-        arrival_time: arrivalTime.length === 5 ? arrivalTime + ':00' : arrivalTime
+        arrival_time: arrivalTime
       });
     }
   });
