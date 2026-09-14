@@ -258,8 +258,15 @@ function initScannerPage() {
       poItems = items.map(item => {
         const lotLogs = logs.filter(l => l.lot_code === item.lot_code);
         const totalWeightScanned = lotLogs.reduce((sum, l) => sum + Number(l.net_weight_kg), 0);
-        const scannedCt = parseFloat((totalWeightScanned / 200).toFixed(2));
-        return { ...item, scanned_ct: scannedCt };
+        
+        // Ambil referensi berat per LOT dari Master Map (Fallback ke 200 jika tidak ada)
+        const stdWeight = skuMasterMap.get(item.lot_code) || 200.0;
+        const scannedCt = parseFloat((totalWeightScanned / stdWeight).toFixed(2));
+
+        return {
+          ...item,
+          scanned_ct: scannedCt
+        };
       });
 
       renderPOSummary(poItems[0]);
@@ -312,6 +319,16 @@ function initScannerPage() {
       return;
     }
 
+    // 1. VALIDASI SKU MASTER (Wajib Terdaftar)
+    if (!skuMasterMap.has(parsed.lotCode)) {
+      playAudio('error');
+      showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Minta Admin untuk update referensi berat terlebih dahulu.`, 'error');
+      return;
+    }
+
+    const stdNetWeight = skuMasterMap.get(parsed.lotCode);
+
+    // 2. Validasi LOT terhadap Order Active
     const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
     if (!matchedLot) {
       playAudio('error');
@@ -319,7 +336,8 @@ function initScannerPage() {
       return;
     }
 
-    const scannedWeightCt = parsed.netWeight / 200;
+    // 3. Perhitungan Konversi CT Dinamis berbasis Master Weight (Bukan Hardcoded /200)
+    const scannedWeightCt = parsed.netWeight / stdNetWeight;
     const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
     const maxAllowedCt = Number(matchedLot.qty_usage_ct);
 
@@ -329,19 +347,7 @@ function initScannerPage() {
       return;
     }
 
-    const { data: existingSN } = await supabaseClient
-      .from('scan_logs')
-      .select('po_number, serial_number')
-      .eq('serial_number', parsed.serialNumber)
-      .maybeSingle();
-
-    if (existingSN) {
-      pendingScanData = { parsed, isBypassed: true };
-      playAudio('warning');
-      openBypassModal(`SN [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN di PO [${existingSN.po_number}]. Tetap masukkan?`);
-      return;
-    }
-
+    // Lanjutkan simpan scan...
     await executeSaveScan(parsed, false);
   }
 
@@ -868,6 +874,24 @@ window.deletePO = async function(poNumber) {
     showFeedback(`❌ Delete error: ${err.message}`, 'error');
   }
 };
+
+let skuMasterMap = new Map();
+
+async function loadSkuMaster() {
+  const { data, error } = await supabaseClient
+    .from('sku_master')
+    .select('lot_code, std_net_weight_kg');
+
+  if (!error && data) {
+    skuMasterMap.clear();
+    data.forEach(item => skuMasterMap.set(item.lot_code, Number(item.std_net_weight_kg)));
+  }
+}
+
+// Panggil di DOMContentLoaded
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSkuMaster();
+});
 
 // ==========================================
 // 4. ROUTER INITIALIZER
