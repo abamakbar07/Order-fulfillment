@@ -36,6 +36,33 @@ body {
   align-items: center;
 }
 
+/* Full-screen Flash Overlay */
+.flash-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.85;
+  display: none;
+}
+.flash-success { background-color: #38a169; }
+.flash-warning { background-color: #dd6b20; }
+.flash-error { background-color: #e53e3e; }
+
+/* Pulse Animation untuk Input Active */
+.scan-input:focus {
+  outline: none;
+  border-color: #3182ce;
+  box-shadow: 0 0 12px rgba(49, 130, 206, 0.8);
+  animation: pulse-border 1.5s infinite;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 4px rgba(49, 130, 206, 0.4); }
+  50% { box-shadow: 0 0 16px rgba(49, 130, 206, 0.9); }
+  100% { box-shadow: 0 0 4px rgba(49, 130, 206, 0.4); }
+}
+
 /* Forms & Selects */
 .form-group { margin-bottom: 8px; }
 .form-row { display: flex; gap: 6px; }

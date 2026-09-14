@@ -29,6 +29,91 @@ function showFeedback(msg, type) {
   }, 4000);
 }
 
+// ==========================================
+// AUDIO BOOSTER, HAPTIC & VISUAL FLASH ENGINE
+// ==========================================
+function triggerFeedback(type) {
+  playBoostedAudio(type);
+  triggerHaptic(type);
+  triggerScreenFlash(type);
+}
+
+function playBoostedAudio(type) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+
+    if (type === 'success') {
+      // High Crisp Double Chime (1000Hz -> 1400Hz)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, now);
+      osc.frequency.exponentialRampToValueAtTime(1400, now + 0.1);
+      gain.gain.setValueAtTime(1.0, now); // Max Volume
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+      
+      osc.start(now);
+      osc.stop(now + 0.25);
+
+    } else if (type === 'warning') {
+      // Tri-Tone Warning (600Hz -> 800Hz)
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.setValueAtTime(800, now + 0.15);
+      gain.gain.setValueAtTime(1.0, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+      osc.start(now);
+      osc.stop(now + 0.35);
+
+    } else if (type === 'error') {
+      // Heavy Industrial Loud Buzzer (Sawtooth 140Hz)
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.setValueAtTime(110, now + 0.2); // Pitch Drop
+      gain.gain.setValueAtTime(1.0, now); // Max Volume
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+
+      osc.start(now);
+      osc.stop(now + 0.6);
+    }
+  } catch (e) {
+    console.log('Audio Context Error:', e);
+  }
+}
+
+// Getar Device (Khusus Android RF Scanner)
+function triggerHaptic(type) {
+  if (!navigator.vibrate) return;
+  if (type === 'success') {
+    navigator.vibrate(150); // Getar 1x 150ms
+  } else if (type === 'warning') {
+    navigator.vibrate([100, 50, 100]); // Getar 2x
+  } else if (type === 'error') {
+    navigator.vibrate([200, 100, 200, 100, 300]); // Getar 3x Panjang
+  }
+}
+
+// Full Screen Visual Flash Effect
+function triggerScreenFlash(type) {
+  const flashOverlay = document.getElementById('screenFlashOverlay');
+  if (!flashOverlay) return;
+
+  flashOverlay.className = `flash-overlay flash-${type}`;
+  flashOverlay.style.display = 'block';
+
+  setTimeout(() => {
+    flashOverlay.style.display = 'none';
+  }, type === 'error' ? 800 : 400); // Merah lebih lama (0.8s)
+}
+
 // Audio Synthesizer
 function playAudio(type) {
   try {
@@ -282,7 +367,7 @@ function initScannerPage() {
       barcodeInput.value = '';
 
       if (!activePO) {
-        playAudio('error');
+        triggerFeedback('warning');
         showFeedback('⚠️ Tolong PILIH PO TARGET terlebih dahulu!', 'warning');
         return;
       }
@@ -314,14 +399,14 @@ function initScannerPage() {
     const parsed = parseHMSBarcode(rawBarcode);
 
     if (!parsed.isValid) {
-      playAudio('error');
+      triggerFeedback('error');
       showFeedback(`❌ ${parsed.message}`, 'error');
       return;
     }
 
     // 1. VALIDASI SKU MASTER (Wajib Terdaftar)
     if (!skuMasterMap.has(parsed.lotCode)) {
-      playAudio('error');
+      triggerFeedback('error')
       showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Minta Admin untuk update referensi berat terlebih dahulu.`, 'error');
       return;
     }
@@ -331,7 +416,7 @@ function initScannerPage() {
     // 2. Validasi LOT terhadap Order Active
     const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
     if (!matchedLot) {
-      playAudio('error');
+      triggerFeedback('error')
       showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
       return;
     }
@@ -342,7 +427,7 @@ function initScannerPage() {
     const maxAllowedCt = Number(matchedLot.qty_usage_ct);
 
     if (projectedCt > maxAllowedCt + 0.05) {
-      playAudio('error');
+      triggerFeedback('error')
       showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT, Current: ${matchedLot.scanned_ct} CT)`, 'error');
       return;
     }
@@ -371,11 +456,11 @@ function initScannerPage() {
 
       if (error) throw error;
 
-      playAudio('success');
+      triggerFeedback('success')
       showFeedback(`✅ [${parsedData.lotCode}] SN OK! (+${parsedData.netWeight} KG)`, 'success');
       await fetchPODetails(activePO);
     } catch (err) {
-      playAudio('error');
+      triggerFeedback('error')
       showFeedback(`❌ DB Save Error: ${err.message}`, 'error');
     }
   }
@@ -412,7 +497,7 @@ ${lotBreakdown}
 _Reported via RF Scanner App_`;
 
     navigator.clipboard.writeText(waMessage).then(() => {
-      playAudio('success');
+      triggerFeedback('success')
       showFeedback('📋 Laporan WA berhasil di-copy ke clipboard!', 'success');
     }).catch(err => {
       showFeedback('Gagal copy text: ' + err, 'error');
@@ -473,7 +558,7 @@ _Reported via RF Scanner App_`;
     try {
       const { error } = await supabaseClient.from('scan_logs').delete().eq('id', logId);
       if (error) throw error;
-      playAudio('success');
+      triggerFeedback('success')
       showFeedback('🗑️ Scan item berhasil dihapus!', 'success');
       await loadLogsTable();
       await fetchPODetails(activePO);
