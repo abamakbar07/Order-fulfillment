@@ -12,6 +12,7 @@ let poItems = [];
 let allOrdersData = [];
 let pendingScanData = null;
 let isManualMode = false;
+let skuMasterMap = new Map();
 
 // Admin Global States
 let parsedData = [];
@@ -26,12 +27,10 @@ function showFeedback(msg, type) {
 
   setTimeout(() => {
     banner.style.display = 'none';
-  }, 4000);
+  }, 4500);
 }
 
-// ==========================================
-// AUDIO BOOSTER, HAPTIC & VISUAL FLASH ENGINE
-// ==========================================
+// Audio Synthesizer & Haptic Engine
 function triggerFeedback(type) {
   playBoostedAudio(type);
   triggerHaptic(type);
@@ -52,35 +51,27 @@ function playBoostedAudio(type) {
     const now = ctx.currentTime;
 
     if (type === 'success') {
-      // High Crisp Double Chime (1000Hz -> 1400Hz)
       osc.type = 'sine';
       osc.frequency.setValueAtTime(1000, now);
       osc.frequency.exponentialRampToValueAtTime(1400, now + 0.1);
-      gain.gain.setValueAtTime(1.0, now); // Max Volume
+      gain.gain.setValueAtTime(1.0, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-      
       osc.start(now);
       osc.stop(now + 0.25);
-
     } else if (type === 'warning') {
-      // Tri-Tone Warning (600Hz -> 800Hz)
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(600, now);
       osc.frequency.setValueAtTime(800, now + 0.15);
       gain.gain.setValueAtTime(1.0, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-
       osc.start(now);
       osc.stop(now + 0.35);
-
     } else if (type === 'error') {
-      // Heavy Industrial Loud Buzzer (Sawtooth 140Hz)
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(140, now);
-      osc.frequency.setValueAtTime(110, now + 0.2); // Pitch Drop
-      gain.gain.setValueAtTime(1.0, now); // Max Volume
+      osc.frequency.setValueAtTime(110, now + 0.2);
+      gain.gain.setValueAtTime(1.0, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-
       osc.start(now);
       osc.stop(now + 0.6);
     }
@@ -89,19 +80,13 @@ function playBoostedAudio(type) {
   }
 }
 
-// Getar Device (Khusus Android RF Scanner)
 function triggerHaptic(type) {
   if (!navigator.vibrate) return;
-  if (type === 'success') {
-    navigator.vibrate(150); // Getar 1x 150ms
-  } else if (type === 'warning') {
-    navigator.vibrate([100, 50, 100]); // Getar 2x
-  } else if (type === 'error') {
-    navigator.vibrate([200, 100, 200, 100, 300]); // Getar 3x Panjang
-  }
+  if (type === 'success') navigator.vibrate(150);
+  else if (type === 'warning') navigator.vibrate([100, 50, 100]);
+  else if (type === 'error') navigator.vibrate([200, 100, 200, 100, 300]);
 }
 
-// Full Screen Visual Flash Effect
 function triggerScreenFlash(type) {
   const flashOverlay = document.getElementById('screenFlashOverlay');
   if (!flashOverlay) return;
@@ -111,45 +96,384 @@ function triggerScreenFlash(type) {
 
   setTimeout(() => {
     flashOverlay.style.display = 'none';
-  }, type === 'error' ? 800 : 400); // Merah lebih lama (0.8s)
+  }, type === 'error' ? 800 : 400);
 }
 
-// Audio Synthesizer
-function playAudio(type) {
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+// Load Master SKU Weights
+async function loadSkuMaster() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from('sku_master')
+    .select('lot_code, std_net_weight_kg');
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'success') {
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
-    } else if (type === 'warning') {
-      osc.frequency.setValueAtTime(500, ctx.currentTime);
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.25);
-    } else if (type === 'error') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(180, ctx.currentTime);
-      gain.gain.setValueAtTime(0.5, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    }
-  } catch (e) {
-    console.log('Audio playback error:', e);
+  if (!error && data) {
+    skuMasterMap.clear();
+    data.forEach(item => skuMasterMap.set(item.lot_code, Number(item.std_net_weight_kg)));
   }
 }
 
+// Date & Time Excel Parsers
+function parseExcelDate(val) {
+  if (!val && val !== 0) return new Date().toISOString().split('T')[0];
+  if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) return val.replace(/\//g, '-');
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 10000) {
+    const utcDays = num - 25569;
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+  return String(val);
+}
+
+function parseExcelTime(val) {
+  if (!val && val !== 0) return '06:00:00';
+  if (typeof val === 'string' && val.includes(':')) return val.length === 5 ? `${val}:00` : val;
+  const num = parseFloat(val);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    const totalSeconds = Math.round(num * 86400);
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+  return String(val);
+}
+
 // ==========================================
-// 2. SCANNER PAGE MODULE (index.html)
+// 2. ADMIN PAGE MODULE (admin.html)
+// ==========================================
+function initAdminPage() {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const btnSaveToDb = document.getElementById('btnSaveToDb');
+  const btnRefresh = document.getElementById('btnRefresh');
+  const btnExportLogs = document.getElementById('btnExportLogs');
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.backgroundColor = '#e2e8f0'; });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.backgroundColor = '#ebf8ff'; });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.style.backgroundColor = '#ebf8ff';
+      if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFileSelect(e.target.files[0]);
+    });
+  }
+
+  if (btnSaveToDb) btnSaveToDb.addEventListener('click', saveToSupabase);
+  if (btnRefresh) btnRefresh.addEventListener('click', loadMasterData);
+  if (btnExportLogs) btnExportLogs.addEventListener('click', exportScanLogsToExcel);
+
+  loadMasterData();
+  populateExportPODropdown();
+}
+
+function handleFileSelect(file) {
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.SheetNames[0];
+      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
+
+      if (rawRows.length === 0) {
+        showFeedback('❌ File kosong atau format tidak sesuai!', 'error');
+        return;
+      }
+      processExcelRows(rawRows);
+    } catch (err) {
+      showFeedback(`❌ Gagal membaca file: ${err.message}`, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// FIX: GABUNGKAN DUPLIKAT LOT PADA PO YANG SAMA
+function processExcelRows(rawRows) {
+  const aggregatedMap = new Map(); // Key: `${poNumber}___${lotCode}`
+
+  rawRows.forEach(row => {
+    const getVal = (keys) => {
+      for (let k of keys) {
+        const foundKey = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
+      }
+      return '';
+    };
+
+    const poNumber = String(getVal(['po_number', 'po number', 'po', 'no po'])).trim();
+    const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim();
+    const lotCode = String(getVal(['lot_code', 'lot code', 'lot'])).trim();
+    const qtyUsage = parseFloat(getVal(['qty_usage_ct', 'qty usage', 'qty ct', 'qty', 'carton'])) || 1.0;
+
+    const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
+    const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
+
+    const arrivalDate = parseExcelDate(rawDate);
+    const arrivalTime = parseExcelTime(rawTime);
+
+    if (poNumber && lotCode) {
+      const compositeKey = `${poNumber}___${lotCode}`;
+
+      if (aggregatedMap.has(compositeKey)) {
+        // Gabungkan QTY jika PO + LOT sama
+        const existing = aggregatedMap.get(compositeKey);
+        existing.qty_usage_ct += qtyUsage;
+        existing.qty_spare_ct += qtyUsage;
+      } else {
+        aggregatedMap.set(compositeKey, {
+          po_number: poNumber,
+          blend_code: blendCode,
+          lot_code: lotCode,
+          qty_usage_ct: qtyUsage,
+          qty_spare_ct: qtyUsage,
+          uom: 'CT',
+          arrival_date: arrivalDate,
+          arrival_time: arrivalTime
+        });
+      }
+    }
+  });
+
+  parsedData = Array.from(aggregatedMap.values());
+
+  if (parsedData.length === 0) {
+    showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
+    return;
+  }
+
+  renderPreviewTable();
+  showFeedback(`✅ Berhasil membaca ${parsedData.length} item LOT unik (duplikat baris otomatis digabungkan).`, 'success');
+}
+
+function renderPreviewTable() {
+  const previewTbody = document.getElementById('previewTbody');
+  const draftCount = document.getElementById('draftCount');
+  const previewArea = document.getElementById('previewArea');
+  const btnSaveToDb = document.getElementById('btnSaveToDb');
+
+  if (!previewTbody) return;
+  previewTbody.innerHTML = '';
+
+  parsedData.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${item.po_number}</strong></td>
+      <td>${item.blend_code}</td>
+      <td>${item.lot_code}</td>
+      <td>${item.qty_usage_ct} CT</td>
+      <td>${item.arrival_date}</td>
+      <td>${item.arrival_time}</td>
+    `;
+    previewTbody.appendChild(tr);
+  });
+
+  if (draftCount) draftCount.innerText = parsedData.length;
+  if (previewArea) previewArea.style.display = 'block';
+  if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block';
+}
+
+async function saveToSupabase() {
+  if (parsedData.length === 0 || !supabaseClient) return;
+
+  const btnSaveToDb = document.getElementById('btnSaveToDb');
+  btnSaveToDb.disabled = true;
+  btnSaveToDb.innerText = '⏳ Saving...';
+
+  try {
+    // 1. Group Headers PO
+    const uniqueOrdersMap = new Map();
+    parsedData.forEach(item => {
+      if (!uniqueOrdersMap.has(item.po_number)) {
+        uniqueOrdersMap.set(item.po_number, {
+          po_number: item.po_number,
+          blend_code: item.blend_code,
+          arrival_date: item.arrival_date,
+          arrival_time: item.arrival_time
+        });
+      }
+    });
+
+    const ordersHeaderList = Array.from(uniqueOrdersMap.values());
+    const poNumberList = ordersHeaderList.map(o => o.po_number);
+
+    // 2. Upsert Orders Header
+    const { error: errOrders } = await supabaseClient
+      .from('orders')
+      .upsert(ordersHeaderList, { onConflict: 'po_number' });
+    if (errOrders) throw errOrders;
+
+    // 3. REVISION STRATEGY: Hapus order_items lama untuk PO ini agar revisi bersih
+    const { error: errDelItems } = await supabaseClient
+      .from('order_items')
+      .delete()
+      .in('po_number', poNumberList);
+    if (errDelItems) throw errDelItems;
+
+    // 4. Insert Order Items Baru
+    const orderItemsList = parsedData.map(item => ({
+      po_number: item.po_number,
+      blend_code: item.blend_code,
+      lot_code: item.lot_code,
+      qty_usage_ct: item.qty_usage_ct,
+      qty_spare_ct: item.qty_spare_ct,
+      uom: item.uom
+    }));
+
+    const { error: errItems } = await supabaseClient
+      .from('order_items')
+      .insert(orderItemsList);
+
+    if (errItems) throw errItems;
+
+    showFeedback('🎉 DATA ORDER / REVISI BERHASIL DISIMPAN KE SUPABASE!', 'success');
+    parsedData = [];
+    document.getElementById('previewArea').style.display = 'none';
+    btnSaveToDb.style.display = 'none';
+    document.getElementById('fileInput').value = '';
+
+    await loadMasterData();
+    await populateExportPODropdown();
+  } catch (err) {
+    showFeedback(`❌ Gagal menyimpan ke DB: ${err.message}`, 'error');
+  } finally {
+    btnSaveToDb.disabled = false;
+    btnSaveToDb.innerText = '💾 Simpan ke Database';
+  }
+}
+
+async function loadMasterData() {
+  const masterPoTbody = document.getElementById('masterPoTbody');
+  if (!masterPoTbody || !supabaseClient) return;
+
+  masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>';
+  try {
+    const { data: orders, error: errOrders } = await supabaseClient.from('orders').select('*').order('arrival_date', { ascending: false });
+    if (errOrders) throw errOrders;
+
+    const { data: items, error: errItems } = await supabaseClient.from('order_items').select('po_number');
+    if (errItems) throw errItems;
+
+    if (!orders || orders.length === 0) {
+      masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Belum ada PO tersimpan.</td></tr>';
+      return;
+    }
+
+    masterPoTbody.innerHTML = '';
+    orders.forEach(po => {
+      const lotCount = items.filter(i => i.po_number === po.po_number).length;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${po.po_number}</strong></td>
+        <td>${po.blend_code || '-'}</td>
+        <td>${po.arrival_date || '-'}</td>
+        <td>${po.arrival_time ? po.arrival_time.substring(0, 5) : '-'}</td>
+        <td><strong>${lotCount} LOT</strong></td>
+        <td>
+          <button class="btn btn-danger btn-sm" onclick="deletePO('${po.po_number}')">Hapus</button>
+        </td>
+      `;
+      masterPoTbody.appendChild(tr);
+    });
+  } catch (err) {
+    masterPoTbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`;
+  }
+}
+
+// Populate Export Dropdown PO List
+async function populateExportPODropdown() {
+  const exportPoSelect = document.getElementById('exportPoSelect');
+  if (!exportPoSelect || !supabaseClient) return;
+
+  const { data: orders } = await supabaseClient.from('orders').select('po_number, blend_code, arrival_date').order('arrival_date', { ascending: false });
+  exportPoSelect.innerHTML = '<option value="ALL">-- SEMUA PO / DATA --</option>';
+
+  if (orders) {
+    orders.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.po_number;
+      opt.innerText = `PO: ${po.po_number} (${po.blend_code}) - ${po.arrival_date}`;
+      exportPoSelect.appendChild(opt);
+    });
+  }
+}
+
+// FEATURE: EXPORT SCAN LOGS TO EXCEL
+async function exportScanLogsToExcel() {
+  if (!supabaseClient) return;
+
+  const exportPoSelect = document.getElementById('exportPoSelect');
+  const selectedPO = exportPoSelect ? exportPoSelect.value : 'ALL';
+
+  showFeedback('⏳ Mengambil data scan log...', 'warning');
+
+  try {
+    let query = supabaseClient.from('scan_logs').select('*').order('scanned_at', { ascending: false });
+    if (selectedPO !== 'ALL') {
+      query = query.eq('po_number', selectedPO);
+    }
+
+    const { data: logs, error } = await query;
+    if (error) throw error;
+
+    if (!logs || logs.length === 0) {
+      showFeedback('⚠️ Tidak ada data scan untuk di-export.', 'warning');
+      return;
+    }
+
+    // Format Data untuk Excel Sheet
+    const formattedData = logs.map((item, index) => ({
+      'No': index + 1,
+      'PO Number': item.po_number,
+      'Serial Number': item.serial_number,
+      'LOT Code': item.lot_code,
+      'Case Number': item.case_number || '-',
+      'PMI Run No': item.pmi_run_no || '-',
+      'Gross Weight (kg)': item.gross_weight_kg,
+      'Net Weight (kg)': item.net_weight_kg,
+      'Moisture (%)': item.moisture,
+      'Grade Code': item.grade_code || '-',
+      'Is Bypassed': item.is_bypassed ? 'YES' : 'NO',
+      'Scanned By': item.scanned_by || 'Operator',
+      'Scanned Timestamp': new Date(item.scanned_at).toLocaleString('id-ID')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(formattedData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Scan Details");
+
+    const filename = selectedPO === 'ALL' 
+      ? `Scan_Detail_Report_All_${new Date().toISOString().split('T')[0]}.xlsx`
+      : `Scan_Detail_Report_PO_${selectedPO}.xlsx`;
+
+    XLSX.writeFile(workbook, filename);
+    showFeedback('✅ Report Excel berhasil di-download!', 'success');
+
+  } catch (err) {
+    showFeedback(`❌ Error Export: ${err.message}`, 'error');
+  }
+}
+
+window.deletePO = async function(poNumber) {
+  if (!confirm(`Yakin ingin menghapus PO [${poNumber}] beserta seluruh LOT terkait?`) || !supabaseClient) return;
+
+  try {
+    const { error } = await supabaseClient.from('orders').delete().eq('po_number', poNumber);
+    if (error) throw error;
+    showFeedback(`🗑️ PO [${poNumber}] berhasil dihapus!`, 'success');
+    await loadMasterData();
+    await populateExportPODropdown();
+  } catch (err) {
+    showFeedback(`❌ Delete error: ${err.message}`, 'error');
+  }
+};
+
+// ==========================================
+// 3. SCANNER PAGE MODULE (index.html)
 // ==========================================
 function initScannerPage() {
   const weekSelect = document.getElementById('weekSelect');
@@ -343,15 +667,9 @@ function initScannerPage() {
       poItems = items.map(item => {
         const lotLogs = logs.filter(l => l.lot_code === item.lot_code);
         const totalWeightScanned = lotLogs.reduce((sum, l) => sum + Number(l.net_weight_kg), 0);
-        
-        // Ambil referensi berat per LOT dari Master Map (Fallback ke 200 jika tidak ada)
         const stdWeight = skuMasterMap.get(item.lot_code) || 200.0;
         const scannedCt = parseFloat((totalWeightScanned / stdWeight).toFixed(2));
-
-        return {
-          ...item,
-          scanned_ct: scannedCt
-        };
+        return { ...item, scanned_ct: scannedCt };
       });
 
       renderPOSummary(poItems[0]);
@@ -367,7 +685,7 @@ function initScannerPage() {
       barcodeInput.value = '';
 
       if (!activePO) {
-        triggerFeedback('warning');
+        triggerFeedback('error');
         showFeedback('⚠️ Tolong PILIH PO TARGET terlebih dahulu!', 'warning');
         return;
       }
@@ -396,71 +714,61 @@ function initScannerPage() {
   }
 
   async function processScan(rawBarcode) {
-  const parsed = parseHMSBarcode(rawBarcode);
+    const parsed = parseHMSBarcode(rawBarcode);
 
-  // 1. Validasi Format Barcode
-  if (!parsed.isValid) {
-    triggerFeedback('error');
-    showFeedback(`❌ ${parsed.message}`, 'error');
-    return;
-  }
-
-  // 2. Validasi SKU Master (Wajib Terdaftar)
-  if (skuMasterMap.size > 0 && !skuMasterMap.has(parsed.lotCode)) {
-    triggerFeedback('error');
-    showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Minta Admin untuk update referensi berat terlebih dahulu.`, 'error');
-    return;
-  }
-
-  const stdNetWeight = skuMasterMap.get(parsed.lotCode) || 200.0;
-
-  // 3. Validasi LOT terhadap PO Active
-  const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
-  if (!matchedLot) {
-    triggerFeedback('error');
-    showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
-    return;
-  }
-
-  // 4. Validasi Over-Picking (Perhitungan CT Dinamis)
-  const scannedWeightCt = parsed.netWeight / stdNetWeight;
-  const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
-  const maxAllowedCt = Number(matchedLot.qty_usage_ct);
-
-  if (projectedCt > maxAllowedCt + 0.05) {
-    triggerFeedback('error');
-    showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT, Current: ${matchedLot.scanned_ct} CT)`, 'error');
-    return;
-  }
-
-  // 5. VALIDASI DUPLICATE SN (FIXED QUERY)
-  // Ambil semua record SN tanpa .maybeSingle() untuk menghindari error jika SN tercatat > 1x
-  const { data: existingSNs, error: errSN } = await supabaseClient
-    .from('scan_logs')
-    .select('po_number')
-    .eq('serial_number', parsed.serialNumber);
-
-  if (existingSNs && existingSNs.length > 0) {
-    // Cek apakah SN ini sudah pernah di-scan pada PO yang SAMA
-    const samePOScan = existingSNs.find(s => s.po_number === activePO);
-
-    if (samePOScan) {
-      // ❌ CASE A: PO YANG SAMA -> BLOCK TOTAL (HARD ERROR)
+    if (!parsed.isValid) {
       triggerFeedback('error');
-      showFeedback(`❌ DUPLICATE SN! Barcode [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN pada PO ini (${activePO})!`, 'error');
-      return; // Langsung dihentikan, tidak memicu Modal Bypass
-    } else {
-      // ⚠️ CASE B: PO LAIN -> POP UP MODAL (SOFT WARNING / BYPASS)
-      const otherPO = existingSNs[0].po_number;
-      pendingScanData = { parsed, isBypassed: true };
-      triggerFeedback('warning');
-      openBypassModal(`SN [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN di PO [${otherPO}]. Tetap masukkan ke PO ${activePO}?`);
+      showFeedback(`❌ ${parsed.message}`, 'error');
       return;
     }
-  }
 
-  // 6. Lolos semua validasi -> Simpan Scan
-  await executeSaveScan(parsed, false);
+    if (skuMasterMap.size > 0 && !skuMasterMap.has(parsed.lotCode)) {
+      triggerFeedback('error');
+      showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Contact Admin.`, 'error');
+      return;
+    }
+
+    const stdNetWeight = skuMasterMap.get(parsed.lotCode) || 200.0;
+    const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
+
+    if (!matchedLot) {
+      triggerFeedback('error');
+      showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
+      return;
+    }
+
+    const scannedWeightCt = parsed.netWeight / stdNetWeight;
+    const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
+    const maxAllowedCt = Number(matchedLot.qty_usage_ct);
+
+    if (projectedCt > maxAllowedCt + 0.05) {
+      triggerFeedback('error');
+      showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT)`, 'error');
+      return;
+    }
+
+    // CHECK DUPLICATE SN
+    const { data: existingSNs } = await supabaseClient
+      .from('scan_logs')
+      .select('po_number')
+      .eq('serial_number', parsed.serialNumber);
+
+    if (existingSNs && existingSNs.length > 0) {
+      const samePOScan = existingSNs.find(s => s.po_number === activePO);
+      if (samePOScan) {
+        triggerFeedback('error');
+        showFeedback(`❌ DUPLICATE SN! Barcode [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN pada PO ini (${activePO})!`, 'error');
+        return;
+      } else {
+        const otherPO = existingSNs[0].po_number;
+        pendingScanData = { parsed, isBypassed: true };
+        triggerFeedback('warning');
+        openBypassModal(`SN [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN di PO [${otherPO}]. Tetap masukkan ke PO ${activePO}?`);
+        return;
+      }
+    }
+
+    await executeSaveScan(parsed, false);
   }
 
   async function executeSaveScan(parsedData, isBypassed) {
@@ -483,11 +791,11 @@ function initScannerPage() {
 
       if (error) throw error;
 
-      triggerFeedback('success')
+      triggerFeedback('success');
       showFeedback(`✅ [${parsedData.lotCode}] SN OK! (+${parsedData.netWeight} KG)`, 'success');
       await fetchPODetails(activePO);
     } catch (err) {
-      triggerFeedback('error')
+      triggerFeedback('error');
       showFeedback(`❌ DB Save Error: ${err.message}`, 'error');
     }
   }
@@ -524,7 +832,7 @@ ${lotBreakdown}
 _Reported via RF Scanner App_`;
 
     navigator.clipboard.writeText(waMessage).then(() => {
-      triggerFeedback('success')
+      triggerFeedback('success');
       showFeedback('📋 Laporan WA berhasil di-copy ke clipboard!', 'success');
     }).catch(err => {
       showFeedback('Gagal copy text: ' + err, 'error');
@@ -585,7 +893,7 @@ _Reported via RF Scanner App_`;
     try {
       const { error } = await supabaseClient.from('scan_logs').delete().eq('id', logId);
       if (error) throw error;
-      triggerFeedback('success')
+      triggerFeedback('success');
       showFeedback('🗑️ Scan item berhasil dihapus!', 'success');
       await loadLogsTable();
       await fetchPODetails(activePO);
@@ -670,345 +978,10 @@ _Reported via RF Scanner App_`;
 }
 
 // ==========================================
-// 3. ADMIN PAGE MODULE (admin.html)
-// ==========================================
-function initAdminPage() {
-  const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('fileInput');
-  const btnSaveToDb = document.getElementById('btnSaveToDb');
-  const btnRefresh = document.getElementById('btnRefresh');
-
-  if (dropzone && fileInput) {
-    dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.backgroundColor = '#e2e8f0'; });
-    dropzone.addEventListener('dragleave', () => { dropzone.style.backgroundColor = '#ebf8ff'; });
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.style.backgroundColor = '#ebf8ff';
-      if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length) handleFileSelect(e.target.files[0]);
-    });
-  }
-
-  if (btnSaveToDb) btnSaveToDb.addEventListener('click', saveToSupabase);
-  if (btnRefresh) btnRefresh.addEventListener('click', loadMasterData);
-
-  loadMasterData();
-}
-
-function handleFileSelect(file) {
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    try {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheet = workbook.SheetNames[0];
-      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
-
-      if (rawRows.length === 0) {
-        showFeedback('❌ File kosong atau format tidak sesuai!', 'error');
-        return;
-      }
-      processExcelRows(rawRows);
-    } catch (err) {
-      showFeedback(`❌ Gagal membaca file: ${err.message}`, 'error');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-// 1. Helper Konversi Serial Date Excel (contoh: 46265 -> "2026-09-08")
-function parseExcelDate(val) {
-  if (!val && val !== 0) return new Date().toISOString().split('T')[0];
-
-  // Jika sudah berformat string "YYYY-MM-DD" atau "YYYY/MM/DD"
-  if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) {
-    return val.replace(/\//g, '-');
-  }
-
-  const num = parseFloat(val);
-  if (!isNaN(num) && num > 10000) {
-    // Offset Epoch Excel (30 Des 1899)
-    const utcDays = num - 25569;
-    const date = new Date(utcDays * 86400 * 1000);
-    return date.toISOString().split('T')[0];
-  }
-
-  return String(val);
-}
-
-// 2. Helper Konversi Fraction Time Excel (contoh: 0.25 -> "06:00:00")
-function parseExcelTime(val) {
-  if (!val && val !== 0) return '06:00:00';
-
-  // Jika sudah berformat jam "HH:mm" atau "HH:mm:ss"
-  if (typeof val === 'string' && val.includes(':')) {
-    return val.length === 5 ? `${val}:00` : val;
-  }
-
-  const num = parseFloat(val);
-  if (!isNaN(num) && num >= 0 && num < 1) {
-    const totalSeconds = Math.round(num * 86400);
-    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-    const seconds = String(totalSeconds % 60).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  return String(val);
-}
-
-// 1. Helper Konversi Serial Date Excel (contoh: 46265 -> "2026-09-08")
-function parseExcelDate(val) {
-  if (!val && val !== 0) return new Date().toISOString().split('T')[0];
-
-  // Jika sudah berformat string "YYYY-MM-DD" atau "YYYY/MM/DD"
-  if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) {
-    return val.replace(/\//g, '-');
-  }
-
-  const num = parseFloat(val);
-  if (!isNaN(num) && num > 10000) {
-    // Offset Epoch Excel (30 Des 1899)
-    const utcDays = num - 25569;
-    const date = new Date(utcDays * 86400 * 1000);
-    return date.toISOString().split('T')[0];
-  }
-
-  return String(val);
-}
-
-// 2. Helper Konversi Fraction Time Excel (contoh: 0.25 -> "06:00:00")
-function parseExcelTime(val) {
-  if (!val && val !== 0) return '06:00:00';
-
-  // Jika sudah berformat jam "HH:mm" atau "HH:mm:ss"
-  if (typeof val === 'string' && val.includes(':')) {
-    return val.length === 5 ? `${val}:00` : val;
-  }
-
-  const num = parseFloat(val);
-  if (!isNaN(num) && num >= 0 && num < 1) {
-    const totalSeconds = Math.round(num * 86400);
-    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-    const seconds = String(totalSeconds % 60).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  return String(val);
-}
-
-// 3. Update bagian mapping di function processExcelRows()
-function processExcelRows(rawRows) {
-  parsedData = [];
-  rawRows.forEach(row => {
-    const getVal = (keys) => {
-      for (let k of keys) {
-        const foundKey = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
-        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
-      }
-      return '';
-    };
-
-    const poNumber = String(getVal(['po_number', 'po number', 'po', 'no po'])).trim();
-    const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim();
-    const lotCode = String(getVal(['lot_code', 'lot code', 'lot'])).trim();
-    const qtyUsage = parseFloat(getVal(['qty_usage_ct', 'qty usage', 'qty ct', 'qty', 'carton'])) || 1.0;
-    
-    // Tangkap data mentah (bisa berupa angka serial / fraction)
-    const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
-    const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
-
-    // Konversi otomatis ke format standar ISO Supabase
-    const arrivalDate = parseExcelDate(rawDate);
-    const arrivalTime = parseExcelTime(rawTime);
-    
-    // // Tangkap data mentah (bisa berupa angka serial / fraction)
-    // const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
-    // const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
-
-    // // Konversi otomatis ke format standar ISO Supabase
-    // const arrivalDate = parseExcelDate(rawDate);
-    // const arrivalTime = parseExcelTime(rawTime);
-
-    if (poNumber && lotCode) {
-      parsedData.push({
-        po_number: poNumber,
-        blend_code: blendCode,
-        lot_code: lotCode,
-        qty_usage_ct: qtyUsage,
-        qty_spare_ct: qtyUsage,
-        uom: 'CT',
-        arrival_date: arrivalDate,
-        arrival_time: arrivalTime
-      });
-    }
-  });
-
-  if (parsedData.length === 0) {
-    showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
-    return;
-  }
-
-  renderPreviewTable();
-  showFeedback(`✅ Berhasil membaca ${parsedData.length} baris data.`, 'success');
-}
-
-function renderPreviewTable() {
-  const previewTbody = document.getElementById('previewTbody');
-  const draftCount = document.getElementById('draftCount');
-  const previewArea = document.getElementById('previewArea');
-  const btnSaveToDb = document.getElementById('btnSaveToDb');
-
-  if (!previewTbody) return;
-  previewTbody.innerHTML = '';
-
-  parsedData.forEach(item => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${item.po_number}</strong></td>
-      <td>${item.blend_code}</td>
-      <td>${item.lot_code}</td>
-      <td>${item.qty_usage_ct} CT</td>
-      <td>${item.arrival_date}</td>
-      <td>${item.arrival_time}</td>
-    `;
-    previewTbody.appendChild(tr);
-  });
-
-  if (draftCount) draftCount.innerText = parsedData.length;
-  if (previewArea) previewArea.style.display = 'block';
-  if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block';
-}
-
-async function saveToSupabase() {
-  if (parsedData.length === 0 || !supabaseClient) return;
-
-  const btnSaveToDb = document.getElementById('btnSaveToDb');
-  btnSaveToDb.disabled = true;
-  btnSaveToDb.innerText = '⏳ Saving...';
-
-  try {
-    const uniqueOrdersMap = new Map();
-    parsedData.forEach(item => {
-      if (!uniqueOrdersMap.has(item.po_number)) {
-        uniqueOrdersMap.set(item.po_number, {
-          po_number: item.po_number,
-          blend_code: item.blend_code,
-          arrival_date: item.arrival_date,
-          arrival_time: item.arrival_time
-        });
-      }
-    });
-
-    const ordersHeaderList = Array.from(uniqueOrdersMap.values());
-    const { error: errOrders } = await supabaseClient.from('orders').upsert(ordersHeaderList, { onConflict: 'po_number' });
-    if (errOrders) throw errOrders;
-
-    const orderItemsList = parsedData.map(item => ({
-      po_number: item.po_number,
-      blend_code: item.blend_code,
-      lot_code: item.lot_code,
-      qty_usage_ct: item.qty_usage_ct,
-      qty_spare_ct: item.qty_spare_ct,
-      uom: item.uom
-    }));
-
-    const { error: errItems } = await supabaseClient.from('order_items').upsert(orderItemsList, { onConflict: 'po_number,lot_code' });
-    if (errItems) throw errItems;
-
-    showFeedback('🎉 DATA BERHASIL DISIMPAN KE SUPABASE!', 'success');
-    parsedData = [];
-    document.getElementById('previewArea').style.display = 'none';
-    btnSaveToDb.style.display = 'none';
-    document.getElementById('fileInput').value = '';
-
-    await loadMasterData();
-  } catch (err) {
-    showFeedback(`❌ Gagal menyimpan ke DB: ${err.message}`, 'error');
-  } finally {
-    btnSaveToDb.disabled = false;
-    btnSaveToDb.innerText = '💾 Simpan ke Database';
-  }
-}
-
-async function loadMasterData() {
-  const masterPoTbody = document.getElementById('masterPoTbody');
-  if (!masterPoTbody || !supabaseClient) return;
-
-  masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>';
-  try {
-    const { data: orders, error: errOrders } = await supabaseClient.from('orders').select('*').order('arrival_date', { ascending: false });
-    if (errOrders) throw errOrders;
-
-    const { data: items, error: errItems } = await supabaseClient.from('order_items').select('po_number');
-    if (errItems) throw errItems;
-
-    if (!orders || orders.length === 0) {
-      masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Belum ada PO tersimpan.</td></tr>';
-      return;
-    }
-
-    masterPoTbody.innerHTML = '';
-    orders.forEach(po => {
-      const lotCount = items.filter(i => i.po_number === po.po_number).length;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong>${po.po_number}</strong></td>
-        <td>${po.blend_code || '-'}</td>
-        <td>${po.arrival_date || '-'}</td>
-        <td>${po.arrival_time ? po.arrival_time.substring(0, 5) : '-'}</td>
-        <td><strong>${lotCount} LOT</strong></td>
-        <td>
-          <button class="btn btn-danger btn-sm" onclick="deletePO('${po.po_number}')">Hapus</button>
-        </td>
-      `;
-      masterPoTbody.appendChild(tr);
-    });
-  } catch (err) {
-    masterPoTbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`;
-  }
-}
-
-window.deletePO = async function(poNumber) {
-  if (!confirm(`Yakin ingin menghapus PO [${poNumber}] beserta seluruh LOT terkait?`) || !supabaseClient) return;
-
-  try {
-    const { error } = await supabaseClient.from('orders').delete().eq('po_number', poNumber);
-    if (error) throw error;
-    showFeedback(`🗑️ PO [${poNumber}] berhasil dihapus!`, 'success');
-    await loadMasterData();
-  } catch (err) {
-    showFeedback(`❌ Delete error: ${err.message}`, 'error');
-  }
-};
-
-let skuMasterMap = new Map();
-
-async function loadSkuMaster() {
-  const { data, error } = await supabaseClient
-    .from('sku_master')
-    .select('lot_code, std_net_weight_kg');
-
-  if (!error && data) {
-    skuMasterMap.clear();
-    data.forEach(item => skuMasterMap.set(item.lot_code, Number(item.std_net_weight_kg)));
-  }
-}
-
-// Panggil di DOMContentLoaded
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadSkuMaster();
-});
-
-// ==========================================
 // 4. ROUTER INITIALIZER
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSkuMaster();
   if (document.getElementById('barcodeInput')) {
     initScannerPage();
   }
