@@ -396,44 +396,71 @@ function initScannerPage() {
   }
 
   async function processScan(rawBarcode) {
-    const parsed = parseHMSBarcode(rawBarcode);
+  const parsed = parseHMSBarcode(rawBarcode);
 
-    if (!parsed.isValid) {
+  // 1. Validasi Format Barcode
+  if (!parsed.isValid) {
+    triggerFeedback('error');
+    showFeedback(`❌ ${parsed.message}`, 'error');
+    return;
+  }
+
+  // 2. Validasi SKU Master (Wajib Terdaftar)
+  if (skuMasterMap.size > 0 && !skuMasterMap.has(parsed.lotCode)) {
+    triggerFeedback('error');
+    showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Minta Admin untuk update referensi berat terlebih dahulu.`, 'error');
+    return;
+  }
+
+  const stdNetWeight = skuMasterMap.get(parsed.lotCode) || 200.0;
+
+  // 3. Validasi LOT terhadap PO Active
+  const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
+  if (!matchedLot) {
+    triggerFeedback('error');
+    showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
+    return;
+  }
+
+  // 4. Validasi Over-Picking (Perhitungan CT Dinamis)
+  const scannedWeightCt = parsed.netWeight / stdNetWeight;
+  const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
+  const maxAllowedCt = Number(matchedLot.qty_usage_ct);
+
+  if (projectedCt > maxAllowedCt + 0.05) {
+    triggerFeedback('error');
+    showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT, Current: ${matchedLot.scanned_ct} CT)`, 'error');
+    return;
+  }
+
+  // 5. VALIDASI DUPLICATE SN (FIXED QUERY)
+  // Ambil semua record SN tanpa .maybeSingle() untuk menghindari error jika SN tercatat > 1x
+  const { data: existingSNs, error: errSN } = await supabaseClient
+    .from('scan_logs')
+    .select('po_number')
+    .eq('serial_number', parsed.serialNumber);
+
+  if (existingSNs && existingSNs.length > 0) {
+    // Cek apakah SN ini sudah pernah di-scan pada PO yang SAMA
+    const samePOScan = existingSNs.find(s => s.po_number === activePO);
+
+    if (samePOScan) {
+      // ❌ CASE A: PO YANG SAMA -> BLOCK TOTAL (HARD ERROR)
       triggerFeedback('error');
-      showFeedback(`❌ ${parsed.message}`, 'error');
+      showFeedback(`❌ DUPLICATE SN! Barcode [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN pada PO ini (${activePO})!`, 'error');
+      return; // Langsung dihentikan, tidak memicu Modal Bypass
+    } else {
+      // ⚠️ CASE B: PO LAIN -> POP UP MODAL (SOFT WARNING / BYPASS)
+      const otherPO = existingSNs[0].po_number;
+      pendingScanData = { parsed, isBypassed: true };
+      triggerFeedback('warning');
+      openBypassModal(`SN [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN di PO [${otherPO}]. Tetap masukkan ke PO ${activePO}?`);
       return;
     }
+  }
 
-    // 1. VALIDASI SKU MASTER (Wajib Terdaftar)
-    if (!skuMasterMap.has(parsed.lotCode)) {
-      triggerFeedback('error')
-      showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Minta Admin untuk update referensi berat terlebih dahulu.`, 'error');
-      return;
-    }
-
-    const stdNetWeight = skuMasterMap.get(parsed.lotCode);
-
-    // 2. Validasi LOT terhadap Order Active
-    const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
-    if (!matchedLot) {
-      triggerFeedback('error')
-      showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
-      return;
-    }
-
-    // 3. Perhitungan Konversi CT Dinamis berbasis Master Weight (Bukan Hardcoded /200)
-    const scannedWeightCt = parsed.netWeight / stdNetWeight;
-    const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
-    const maxAllowedCt = Number(matchedLot.qty_usage_ct);
-
-    if (projectedCt > maxAllowedCt + 0.05) {
-      triggerFeedback('error')
-      showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT, Current: ${matchedLot.scanned_ct} CT)`, 'error');
-      return;
-    }
-
-    // Lanjutkan simpan scan...
-    await executeSaveScan(parsed, false);
+  // 6. Lolos semua validasi -> Simpan Scan
+  await executeSaveScan(parsed, false);
   }
 
   async function executeSaveScan(parsedData, isBypassed) {
