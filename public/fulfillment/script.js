@@ -1,10 +1,12 @@
 // ==========================================
 // 1. SUPABASE CONFIGURATION
 // ==========================================
-const SUPABASE_URL = 'https://dtrzkyjbdjngyuquajkk.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_zZJ7aREpv6jjemYmrrWtUw_ZgoMD2Us';
+const SUPABASE_URL = window.APP_CONFIG?.SUPABASE_URL;
+const SUPABASE_KEY = window.APP_CONFIG?.SUPABASE_KEY;
 
-const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const supabaseClient = window.supabase && SUPABASE_URL && SUPABASE_KEY
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
 
 // Scanner Global States
 let activePO = null;
