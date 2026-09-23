@@ -2,4 +2,4 @@ import { type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/proxy'
 
 export async function middleware(request: NextRequest) { return updateSession(request) }
-export const config = { matcher: ['/fulfillment/:path*', '/auth/:path*'] }
+export const config = { matcher: ['/fulfillment/:path*', '/users/:path*', '/auth/:path*'] }
