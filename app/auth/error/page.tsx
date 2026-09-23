@@ -1,0 +1,1 @@
+export default function AuthErrorPage() { return <main className="auth-page"><section className="auth-card"><p className="eyebrow">NORTHSTAR · RF SCANNER</p><h1>Authentication error</h1><p className="auth-copy">The sign-in link could not be completed. Please try again.</p><a href="/auth/login">Return to sign in</a></section></main> }
