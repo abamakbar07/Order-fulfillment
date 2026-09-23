@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-
-async function requireUser() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
-}
-
 function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } })
 }
 
 export async function GET() {
-  if (!await requireUser()) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 })
   const supabase = adminClient()
   const { data, error } = await supabase.from('warehouse_members').select('id, login_id, full_name, created_at').order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: 'Unable to load warehouse users.' }, { status: 500 })
@@ -21,7 +12,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!await requireUser()) return NextResponse.json({ error: 'Sign in required.' }, { status: 401 })
   const body = await request.json() as { loginId?: string; fullName?: string; password?: string }
   const loginId = body.loginId?.trim().toLowerCase()
   const fullName = body.fullName?.trim()
