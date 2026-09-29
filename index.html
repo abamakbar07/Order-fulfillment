@@ -1,3 +1,6 @@
+<!-- ==================================================================== -->
+<!-- 3. index.html -->
+<!-- ==================================================================== -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -10,10 +13,8 @@
 </head>
 <body>
 
-  <!-- Visual Flash Overlay untuk Gudang -->
   <div id="screenFlashOverlay" class="flash-overlay"></div>
 
-  <!-- CONFIG & PO SELECTION CARD -->
   <div class="card">
     <div class="header-title">
       <span>Warehouse RF Scanner</span>
@@ -24,13 +25,11 @@
       </div>
     </div>
 
-    <!-- FILTER STEP 1: SELECT WHID -->
     <div class="form-group">
       <label for="whSelect">1. PILIH WAREHOUSE ID (WHID):</label>
       <select id="whSelect"><option value="">-- Pilih WHID --</option></select>
     </div>
 
-    <!-- FILTER STEP 2: SELECT DATE / WEEK (FILTERED BY WHID) -->
     <div class="form-row">
       <div class="form-group">
         <label for="weekSelect">2. Week:</label>
@@ -42,7 +41,6 @@
       </div>
     </div>
     
-    <!-- FILTER STEP 3: SELECT PO -->
     <div class="form-group" style="margin-top: 4px;">
       <label for="poSelect">
         4. Target PO: 
@@ -52,7 +50,6 @@
       <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
     </div>
     
-    <!-- PO SUMMARY AREA -->
     <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
       <div><strong>WHID:</strong> <span id="lblWhId">-</span> | <strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Time:</strong> <span id="lblTime">-</span></div>
       <div style="margin-top: 4px;">
@@ -64,16 +61,13 @@
     </div>
   </div>
 
-  <!-- SCANNER INPUT AREA -->
   <div class="scan-container">
     <label for="barcodeInput" style="color: #2b6cb0;">TEMBAK BARCODE (31 CHARS):</label>
     <input type="text" id="barcodeInput" class="scan-input" autofocus autocomplete="off" placeholder="Scan Serial Number..." />
   </div>
 
-  <!-- FEEDBACK BANNER -->
   <div id="feedbackBanner" class="feedback-banner"></div>
 
-  <!-- LOT PROGRESS LIST CARD -->
   <div class="card">
     <div class="header-title" style="font-size: 13px;">Target Lot Progress</div>
     <div class="table-container">
@@ -93,7 +87,6 @@
     </div>
   </div>
 
-  <!-- MODAL SOFT WARNING (BYPASS DUPLICATE) -->
   <div id="modalBypass" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-title" style="color: #c05621;">⚠️ DUPLICATE SN DETECTED</div>
@@ -107,7 +100,6 @@
     </div>
   </div>
 
-  <!-- MODAL MANAGE SCAN LOGS (DELETE / UNDO SCAN) -->
   <div id="modalLogs" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-title">

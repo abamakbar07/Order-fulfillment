@@ -1,12 +1,11 @@
-// ==========================================
-// 1. SUPABASE CONFIGURATION & GLOBAL STATES
-// ==========================================
+// ====================================================================
+// 4. script.js
+// ====================================================================
 const SUPABASE_URL = 'https://dtrzkyjbdjngyuquajkk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_zZJ7aREpv6jjemYmrrWtUw_ZgoMD2Us';
 
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// Scanner Global States
 let activePO = null;
 let activeWHID = null;
 let poItems = [];
@@ -15,11 +14,9 @@ let pendingScanData = null;
 let isManualMode = false;
 let skuMasterMap = new Map();
 
-// Admin Global States
 let parsedOrderData = [];
 let parsedSkuData = [];
 
-// Helper: Show Feedback Banner
 function showFeedback(msg, type) {
   const banner = document.getElementById('feedbackBanner') || document.getElementById('statusBanner');
   if (!banner) return;
@@ -32,7 +29,6 @@ function showFeedback(msg, type) {
   }, 4500);
 }
 
-// Audio Synthesizer & Haptic Engine
 function triggerFeedback(type) {
   playBoostedAudio(type);
   triggerHaptic(type);
@@ -101,7 +97,6 @@ function triggerScreenFlash(type) {
   }, type === 'error' ? 800 : 400);
 }
 
-// Load Master SKU Weights
 async function loadSkuMaster() {
   if (!supabaseClient) return;
   const { data, error } = await supabaseClient
@@ -141,16 +136,14 @@ function parseExcelTime(val) {
 }
 
 // ==========================================
-// 2. ADMIN PAGE MODULE (admin.html)
+// ADMIN MODULE
 // ==========================================
 function initAdminPage() {
-  // Elements SKU Master
   const dropzoneSku = document.getElementById('dropzoneSku');
   const fileInputSku = document.getElementById('fileInputSku');
   const btnSaveSkuMaster = document.getElementById('btnSaveSkuMaster');
   const btnDownloadSkuTemplate = document.getElementById('btnDownloadSkuTemplate');
 
-  // Elements Order Import
   const dropzoneOrder = document.getElementById('dropzoneOrder');
   const fileInputOrder = document.getElementById('fileInputOrder');
   const btnSaveToDb = document.getElementById('btnSaveToDb');
@@ -158,12 +151,11 @@ function initAdminPage() {
 
   const btnRefresh = document.getElementById('btnRefresh');
   const btnExportLogs = document.getElementById('btnExportLogs');
+  const btnGeneratePdf = document.getElementById('btnGeneratePdf');
 
-  // Download Template Listeners
   if (btnDownloadSkuTemplate) btnDownloadSkuTemplate.addEventListener('click', downloadSkuTemplate);
   if (btnDownloadOrderTemplate) btnDownloadOrderTemplate.addEventListener('click', downloadOrderTemplate);
 
-  // Listeners SKU Master Upload
   if (dropzoneSku && fileInputSku) {
     dropzoneSku.addEventListener('click', () => fileInputSku.click());
     fileInputSku.addEventListener('change', (e) => {
@@ -171,7 +163,6 @@ function initAdminPage() {
     });
   }
 
-  // Listeners Order Upload
   if (dropzoneOrder && fileInputOrder) {
     dropzoneOrder.addEventListener('click', () => fileInputOrder.click());
     fileInputOrder.addEventListener('change', (e) => {
@@ -183,12 +174,16 @@ function initAdminPage() {
   if (btnSaveToDb) btnSaveToDb.addEventListener('click', saveToSupabase);
   if (btnRefresh) btnRefresh.addEventListener('click', loadMasterData);
   if (btnExportLogs) btnExportLogs.addEventListener('click', exportScanLogsToExcel);
+  if (btnGeneratePdf) btnGeneratePdf.addEventListener('click', () => {
+    const exportPoSelect = document.getElementById('exportPoSelect');
+    const po = exportPoSelect ? exportPoSelect.value : 'ALL';
+    generateOutboundPdfReport(po);
+  });
 
   loadMasterData();
   populateExportPODropdown();
 }
 
-// FUNCTION: GENERATE & DOWNLOAD SKU MASTER TEMPLATE
 function downloadSkuTemplate() {
   const sampleSkuData = [
     { lot_code: 'LB2370', std_net_weight_kg: 180 },
@@ -204,36 +199,10 @@ function downloadSkuTemplate() {
   showFeedback('📥 Template SKU Master berhasil di-download!', 'success');
 }
 
-// FUNCTION: GENERATE & DOWNLOAD ORDER HMS TEMPLATE
 function downloadOrderTemplate() {
   const sampleOrderData = [
-    { 
-      wh_id: 'WH01', 
-      po_number: '101412213', 
-      lot_code: 'LB8333', 
-      qty_usage_ct: 10, 
-      arrival_date: '2026-09-08', 
-      arrival_time: '06:00', 
-      blend_code: 'AA60R' 
-    },
-    { 
-      wh_id: 'WH01', 
-      po_number: '101412213', 
-      lot_code: 'LG0778', 
-      qty_usage_ct: 5, 
-      arrival_date: '2026-09-08', 
-      arrival_time: '06:00', 
-      blend_code: 'AA60R' 
-    },
-    { 
-      wh_id: 'WH02', 
-      po_number: '101412214', 
-      lot_code: 'LB2370', 
-      qty_usage_ct: 8, 
-      arrival_date: '2026-09-09', 
-      arrival_time: '08:00', 
-      blend_code: 'AA60T' 
-    }
+    { wh_id: 'WH01', po_number: '101412213', lot_code: 'LB8333', qty_usage_ct: 10, arrival_date: '2026-09-08', arrival_time: '06:00', blend_code: 'AA60R' },
+    { wh_id: 'WH01', po_number: '101412213', lot_code: 'LG0778', qty_usage_ct: 5, arrival_date: '2026-09-08', arrival_time: '06:00', blend_code: 'AA60R' }
   ];
 
   const worksheet = XLSX.utils.json_to_sheet(sampleOrderData);
@@ -243,7 +212,6 @@ function downloadOrderTemplate() {
   showFeedback('📥 Template Order HMS berhasil di-download!', 'success');
 }
 
-// PARSE SKU MASTER FILE
 function handleSkuFileSelect(file) {
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -253,10 +221,7 @@ function handleSkuFileSelect(file) {
       const firstSheet = workbook.SheetNames[0];
       const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
 
-      if (rawRows.length === 0) {
-        showFeedback('❌ File SKU Master kosong!', 'error');
-        return;
-      }
+      if (rawRows.length === 0) return showFeedback('❌ File SKU Master kosong!', 'error');
       processSkuMasterRows(rawRows);
     } catch (err) {
       showFeedback(`❌ Gagal membaca file SKU: ${err.message}`, 'error');
@@ -280,19 +245,12 @@ function processSkuMasterRows(rawRows) {
     const netWeight = parseFloat(getVal(['std_net_weight_kg', 'net_weight', 'net', 'weight', 'berat'])) || 200.0;
 
     if (lotCode) {
-      parsedSkuData.push({
-        lot_code: lotCode,
-        std_net_weight_kg: netWeight
-      });
+      parsedSkuData.push({ lot_code: lotCode, std_net_weight_kg: netWeight });
     }
   });
 
-  if (parsedSkuData.length === 0) {
-    showFeedback('❌ Kolom SKU / Net Weight tidak terdeteksi!', 'error');
-    return;
-  }
+  if (parsedSkuData.length === 0) return showFeedback('❌ Kolom SKU / Net Weight tidak terdeteksi!', 'error');
 
-  // Render Preview SKU
   const previewSkuTbody = document.getElementById('previewSkuTbody');
   previewSkuTbody.innerHTML = '';
   parsedSkuData.forEach(item => {
@@ -309,39 +267,26 @@ function processSkuMasterRows(rawRows) {
 
 async function saveSkuMasterToDb() {
   if (parsedSkuData.length === 0 || !supabaseClient) return;
-
   const btnSaveSkuMaster = document.getElementById('btnSaveSkuMaster');
   btnSaveSkuMaster.disabled = true;
-  btnSaveSkuMaster.innerText = '⏳ Saving...';
 
   try {
-    const { error } = await supabaseClient
-      .from('sku_master')
-      .upsert(parsedSkuData, { onConflict: 'lot_code' });
-
+    const { error } = await supabaseClient.from('sku_master').upsert(parsedSkuData, { onConflict: 'lot_code' });
     if (error) throw error;
 
     showFeedback('🎉 SKU Master berhasil diperbarui!', 'success');
-    
-    // Reload local cache map SKU
     await loadSkuMaster();
-    
     document.getElementById('previewSkuArea').style.display = 'none';
     btnSaveSkuMaster.style.display = 'none';
 
-    // Auto-revalidate Order Preview jika sedang ada draft yang pending
-    if (parsedOrderData.length > 0) {
-      renderPreviewOrderTable();
-    }
+    if (parsedOrderData.length > 0) renderPreviewOrderTable();
   } catch (err) {
     showFeedback(`❌ Gagal simpan SKU: ${err.message}`, 'error');
   } finally {
     btnSaveSkuMaster.disabled = false;
-    btnSaveSkuMaster.innerText = '💾 Simpan Master SKU';
   }
 }
 
-// PARSE ORDER FILE (Mandatory: PO, SKU, Qty | Optional: WHID, Date, Time, Blend)
 function handleOrderFileSelect(file) {
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -351,10 +296,7 @@ function handleOrderFileSelect(file) {
       const firstSheet = workbook.SheetNames[0];
       const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
 
-      if (rawRows.length === 0) {
-        showFeedback('❌ File Order kosong!', 'error');
-        return;
-      }
+      if (rawRows.length === 0) return showFeedback('❌ File Order kosong!', 'error');
       processExcelRows(rawRows);
     } catch (err) {
       showFeedback(`❌ Gagal membaca file Order: ${err.message}`, 'error');
@@ -375,12 +317,10 @@ function processExcelRows(rawRows) {
       return '';
     };
 
-    // Mandatory
     const poNumber = String(getVal(['po_number', 'po number', 'po', 'no po'])).trim();
     const lotCode = String(getVal(['lot_code', 'lot code', 'sku', 'lot'])).trim();
     const qtyUsage = parseFloat(getVal(['qty_usage_ct', 'qty usage', 'qty ct', 'qty', 'carton'])) || 1.0;
 
-    // Optional
     const whId = String(getVal(['wh_id', 'whid', 'warehouse', 'wh'])).trim() || 'WH01';
     const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim() || '-';
     const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
@@ -391,7 +331,6 @@ function processExcelRows(rawRows) {
 
     if (poNumber && lotCode) {
       const compositeKey = `${poNumber}___${lotCode}`;
-
       if (aggregatedMap.has(compositeKey)) {
         const existing = aggregatedMap.get(compositeKey);
         existing.qty_usage_ct += qtyUsage;
@@ -414,13 +353,8 @@ function processExcelRows(rawRows) {
 
   parsedOrderData = Array.from(aggregatedMap.values());
 
-  if (parsedOrderData.length === 0) {
-    showFeedback('❌ Format tidak sesuai. Pastikan ada kolom "PO" dan "SKU / Lot Code"', 'error');
-    return;
-  }
-
+  if (parsedOrderData.length === 0) return showFeedback('❌ Format tidak sesuai! Kolom PO & SKU/Lot wajib ada.', 'error');
   renderPreviewOrderTable();
-  showFeedback(`✅ ${parsedOrderData.length} item Order unik siap disimpan.`, 'success');
 }
 
 function renderPreviewOrderTable() {
@@ -435,16 +369,11 @@ function renderPreviewOrderTable() {
   let missingSkus = new Set();
 
   parsedOrderData.forEach(item => {
-    // Cek ketersediaan LOT di SKU Master Map
     const isSkuValid = skuMasterMap.has(item.lot_code);
-    if (!isSkuValid) {
-      missingSkus.add(item.lot_code);
-    }
+    if (!isSkuValid) missingSkus.add(item.lot_code);
 
     const tr = document.createElement('tr');
-    if (!isSkuValid) {
-      tr.style.backgroundColor = '#fff5f5'; // Red tint for unregistered SKU
-    }
+    if (!isSkuValid) tr.style.backgroundColor = '#fff5f5';
 
     tr.innerHTML = `
       <td><strong>${item.wh_id}</strong></td>
@@ -464,31 +393,21 @@ function renderPreviewOrderTable() {
   if (draftCount) draftCount.innerText = parsedOrderData.length;
   if (previewArea) previewArea.style.display = 'block';
 
-  // VALIDASI SKU BLOCKER
   if (missingSkus.size > 0) {
     const unregList = Array.from(missingSkus).join(', ');
-    showFeedback(`❌ ORDER DITOLAK! Terdeteksi ${missingSkus.size} SKU belum terdaftar di Master: [${unregList}]. Harap upload SKU Master terlebih dahulu di Section 1!`, 'error');
-    if (btnSaveToDb) btnSaveToDb.style.display = 'none'; // Lock Save Button
+    showFeedback(`❌ ORDER DITOLAK! ${missingSkus.size} SKU belum terdaftar: [${unregList}]. Harap upload SKU Master terlebih dahulu di Section 1!`, 'error');
+    if (btnSaveToDb) btnSaveToDb.style.display = 'none';
   } else {
-    showFeedback(`✅ ${parsedOrderData.length} item Order valid & seluruh SKU terdaftar di Master. Siap disimpan!`, 'success');
-    if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block'; // Unlock Save Button
+    showFeedback(`✅ ${parsedOrderData.length} item Order valid & seluruh SKU terdaftar. Siap disimpan!`, 'success');
+    if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block';
   }
 }
 
 async function saveToSupabase() {
   if (parsedOrderData.length === 0 || !supabaseClient) return;
 
-  // Double Guard Check
-  const unregItems = parsedOrderData.filter(item => !skuMasterMap.has(item.lot_code));
-  if (unregItems.length > 0) {
-    const unregList = [...new Set(unregItems.map(i => i.lot_code))].join(', ');
-    showFeedback(`❌ GAGAL SIMPAN! SKU berikut belum terdaftar di SKU Master: [${unregList}]`, 'error');
-    return;
-  }
-
   const btnSaveToDb = document.getElementById('btnSaveToDb');
   btnSaveToDb.disabled = true;
-  btnSaveToDb.innerText = '⏳ Saving...';
 
   try {
     const uniqueOrdersMap = new Map();
@@ -507,20 +426,12 @@ async function saveToSupabase() {
     const ordersHeaderList = Array.from(uniqueOrdersMap.values());
     const poNumberList = ordersHeaderList.map(o => o.po_number);
 
-    // 1. Upsert Header Orders
-    const { error: errOrders } = await supabaseClient
-      .from('orders')
-      .upsert(ordersHeaderList, { onConflict: 'po_number' });
+    const { error: errOrders } = await supabaseClient.from('orders').upsert(ordersHeaderList, { onConflict: 'po_number' });
     if (errOrders) throw errOrders;
 
-    // 2. Delete Items Lama untuk PO ini (Revision Strategy)
-    const { error: errDelItems } = await supabaseClient
-      .from('order_items')
-      .delete()
-      .in('po_number', poNumberList);
+    const { error: errDelItems } = await supabaseClient.from('order_items').delete().in('po_number', poNumberList);
     if (errDelItems) throw errDelItems;
 
-    // 3. Insert Items Baru
     const orderItemsList = parsedOrderData.map(item => ({
       po_number: item.po_number,
       blend_code: item.blend_code,
@@ -530,10 +441,7 @@ async function saveToSupabase() {
       uom: item.uom
     }));
 
-    const { error: errItems } = await supabaseClient
-      .from('order_items')
-      .insert(orderItemsList);
-
+    const { error: errItems } = await supabaseClient.from('order_items').insert(orderItemsList);
     if (errItems) throw errItems;
 
     showFeedback('🎉 ORDER BERHASIL DISIMPAN KE DATABASE!', 'success');
@@ -547,7 +455,6 @@ async function saveToSupabase() {
     showFeedback(`❌ Gagal menyimpan Order: ${err.message}`, 'error');
   } finally {
     btnSaveToDb.disabled = false;
-    btnSaveToDb.innerText = '💾 Simpan Order ke Database';
   }
 }
 
@@ -594,7 +501,7 @@ async function populateExportPODropdown() {
   const exportPoSelect = document.getElementById('exportPoSelect');
   if (!exportPoSelect || !supabaseClient) return;
 
-  const { data: orders } = await supabaseClient.from('orders').select('po_number, wh_id, blend_code').order('created_at', { ascending: false });
+  const { data: orders } = await supabaseClient.from('orders').select('po_number, wh_id').order('created_at', { ascending: false });
   exportPoSelect.innerHTML = '<option value="ALL">-- SEMUA PO / DATA --</option>';
 
   if (orders) {
@@ -609,7 +516,6 @@ async function populateExportPODropdown() {
 
 async function exportScanLogsToExcel() {
   if (!supabaseClient) return;
-
   const exportPoSelect = document.getElementById('exportPoSelect');
   const selectedPO = exportPoSelect ? exportPoSelect.value : 'ALL';
 
@@ -617,17 +523,12 @@ async function exportScanLogsToExcel() {
 
   try {
     let query = supabaseClient.from('scan_logs').select('*').order('scanned_at', { ascending: false });
-    if (selectedPO !== 'ALL') {
-      query = query.eq('po_number', selectedPO);
-    }
+    if (selectedPO !== 'ALL') query = query.eq('po_number', selectedPO);
 
     const { data: logs, error } = await query;
     if (error) throw error;
 
-    if (!logs || logs.length === 0) {
-      showFeedback('⚠️ Tidak ada data scan untuk di-export.', 'warning');
-      return;
-    }
+    if (!logs || logs.length === 0) return showFeedback('⚠️ Tidak ada data scan untuk di-export.', 'warning');
 
     const formattedData = logs.map((item, index) => ({
       'No': index + 1,
@@ -637,7 +538,6 @@ async function exportScanLogsToExcel() {
       'Case Number': item.case_number || '-',
       'Gross Weight (kg)': item.gross_weight_kg,
       'Net Weight (kg)': item.net_weight_kg,
-      'Moisture (%)': item.moisture,
       'Is Bypassed': item.is_bypassed ? 'YES' : 'NO',
       'Scanned By': item.scanned_by || 'Operator',
       'Scanned Timestamp': new Date(item.scanned_at).toLocaleString('id-ID')
@@ -646,22 +546,102 @@ async function exportScanLogsToExcel() {
     const worksheet = XLSX.utils.json_to_sheet(formattedData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Scan Details");
-
-    const filename = selectedPO === 'ALL' 
-      ? `Scan_Detail_Report_All_${new Date().toISOString().split('T')[0]}.xlsx`
-      : `Scan_Detail_Report_PO_${selectedPO}.xlsx`;
-
-    XLSX.writeFile(workbook, filename);
+    XLSX.writeFile(workbook, `Scan_Report_${selectedPO}_${new Date().toISOString().split('T')[0]}.xlsx`);
     showFeedback('✅ Report Excel berhasil di-download!', 'success');
-
   } catch (err) {
     showFeedback(`❌ Error Export: ${err.message}`, 'error');
   }
 }
 
+async function generateOutboundPdfReport(poTarget) {
+  showFeedback('⏳ Generating PDF Report...', 'warning');
+  try {
+    let query = supabaseClient.from('orders').select('*, staging_monitoring_logs(*)');
+    if (poTarget !== 'ALL') query = query.eq('po_number', poTarget);
+
+    const { data: orders, error } = await query;
+    if (error || !orders || orders.length === 0) throw new Error('Data PO / Staging Logs tidak ditemukan.');
+
+    let rowsHtml = '';
+    orders.forEach(po => {
+      const log = po.staging_monitoring_logs && po.staging_monitoring_logs.length > 0 
+        ? po.staging_monitoring_logs[po.staging_monitoring_logs.length - 1] 
+        : {};
+
+      rowsHtml += `
+        <tr>
+          <td><strong>${po.po_number}</strong><br><small>${po.blend_code || ''}</small></td>
+          <td>${log.photo_mori_url ? `<img src="${log.photo_mori_url}" class="pdf-img"/>` : '-'}</td>
+          <td>${log.photo_serrico_out_url ? `<img src="${log.photo_serrico_out_url}" class="pdf-img"/>` : '-'}</td>
+          <td>${log.photo_serrico_in_url ? `<img src="${log.photo_serrico_in_url}" class="pdf-img"/>` : '-'}</td>
+          <td>${log.nomor_kain_mori || '-'}</td>
+          <td>${log.total_box || 0}</td>
+          <td>${log.serrico_trap_qty || 0}</td>
+          <td style="background-color: #fef08a; font-weight:bold;">PASSED</td>
+          <td style="background-color: #fef08a;">COLD STORAGE</td>
+          <td>${po.wh_id || 'WH01'}</td>
+          <td>${log.inspection_date || ''}<br>${log.inspection_time || ''}</td>
+        </tr>
+      `;
+    });
+
+    const reportElement = document.createElement('div');
+    reportElement.id = 'pdfReportTemplate';
+    reportElement.innerHTML = `
+      <style>
+        #pdfReportTemplate { font-family: Arial, sans-serif; padding: 15px; color: #1e293b; font-size: 10px; }
+        .report-header { border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; margin-bottom: 10px; }
+        .report-title { font-size: 14px; font-weight: bold; color: #1e3a8a; }
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .report-table th, .report-table td { border: 1px solid #cbd5e1; padding: 4px; text-align: center; vertical-align: middle; }
+        .report-table th { background-color: #f1f5f9; font-weight: bold; }
+        .pdf-img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+      </style>
+      <div class="report-header">
+        <div class="report-title">Evidence Monitoring Outbound | ${new Date().toLocaleDateString('id-ID')}</div>
+      </div>
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th colspan="11" style="background-color: #3b82f6; color: white;">MONITORING MATERIAL (STAGING)</th>
+          </tr>
+          <tr>
+            <th>PO Number</th>
+            <th>Kain Mori</th>
+            <th>Serrico Luar</th>
+            <th>Serrico Dalam</th>
+            <th>No. Mori</th>
+            <th>Total Box</th>
+            <th>Serrico Qty</th>
+            <th>Status</th>
+            <th>Keterangan</th>
+            <th>WHID</th>
+            <th>Jam Mon.</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `;
+
+    document.body.appendChild(reportElement);
+    const opt = {
+      margin: 0.3,
+      filename: `Evidence_Report_${poTarget}_${new Date().toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
+    };
+
+    await html2pdf().set(opt).from(reportElement).save();
+    document.body.removeChild(reportElement);
+    showFeedback('🎉 PDF Evidence Report berhasil di-download!', 'success');
+  } catch (err) {
+    showFeedback(`❌ Gagal generate PDF: ${err.message}`, 'error');
+  }
+}
+
 window.deletePO = async function(poNumber) {
   if (!confirm(`Yakin ingin menghapus PO [${poNumber}] beserta seluruh LOT terkait?`) || !supabaseClient) return;
-
   try {
     const { error } = await supabaseClient.from('orders').delete().eq('po_number', poNumber);
     if (error) throw error;
@@ -674,7 +654,7 @@ window.deletePO = async function(poNumber) {
 };
 
 // ==========================================
-// 3. SCANNER PAGE MODULE (index.html)
+// SCANNER MODULE
 // ==========================================
 function initScannerPage() {
   const whSelect = document.getElementById('whSelect');
@@ -711,11 +691,7 @@ function initScannerPage() {
 
   async function fetchAllOrders() {
     try {
-      const { data, error } = await supabaseClient
-        .from('orders')
-        .select('*')
-        .order('arrival_date', { ascending: true });
-
+      const { data, error } = await supabaseClient.from('orders').select('*').order('arrival_date', { ascending: true });
       if (error) throw error;
       allOrdersData = data || [];
       populateWHIDDropdown();
@@ -724,7 +700,6 @@ function initScannerPage() {
     }
   }
 
-  // STEP 1: POPULATE WHID
   function populateWHIDDropdown() {
     const whList = [...new Set(allOrdersData.map(item => item.wh_id || 'WH01'))];
     whSelect.innerHTML = '<option value="">-- Pilih WHID --</option>';
@@ -736,7 +711,6 @@ function initScannerPage() {
     });
   }
 
-  // EVENT WHID CHANGED -> FILTER WEEKS & POS
   whSelect.addEventListener('change', () => {
     activeWHID = whSelect.value;
     weekSelect.innerHTML = '<option value="">- Week -</option>';
@@ -749,10 +723,8 @@ function initScannerPage() {
 
     if (!activeWHID) return;
 
-    // Populate Weeks for selected WHID
     const whFilteredOrders = allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID);
     const weeks = [...new Set(whFilteredOrders.map(item => getISOWeek(item.arrival_date)))];
-    
     weeks.forEach(w => {
       const opt = document.createElement('option');
       opt.value = w;
@@ -760,7 +732,6 @@ function initScannerPage() {
       weekSelect.appendChild(opt);
     });
 
-    // Directly populate POs for this WHID
     populatePOsForWH(whFilteredOrders);
   });
 
@@ -779,11 +750,7 @@ function initScannerPage() {
     dateSelect.innerHTML = '<option value="">- Date -</option>';
     dateSelect.disabled = !selectedWeek;
 
-    if (!selectedWeek) {
-      const whFilteredOrders = allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID);
-      populatePOsForWH(whFilteredOrders);
-      return;
-    }
+    if (!selectedWeek) return populatePOsForWH(allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID));
 
     const filteredDates = [...new Set(
       allOrdersData
@@ -802,11 +769,7 @@ function initScannerPage() {
   dateSelect.addEventListener('change', () => {
     const selectedDate = dateSelect.value;
     if (!selectedDate) return;
-
-    const matchedPOs = allOrdersData.filter(
-      item => (item.wh_id || 'WH01') === activeWHID && item.arrival_date === selectedDate
-    );
-    populatePOsForWH(matchedPOs);
+    populatePOsForWH(allOrdersData.filter(item => (item.wh_id || 'WH01') === activeWHID && item.arrival_date === selectedDate));
   });
 
   poSelect.addEventListener('change', async (e) => {
@@ -855,18 +818,10 @@ function initScannerPage() {
 
   async function fetchPODetails(poNumber) {
     try {
-      const { data: items, error: errItems } = await supabaseClient
-        .from('order_items')
-        .select('*')
-        .eq('po_number', poNumber);
-
+      const { data: items, error: errItems } = await supabaseClient.from('order_items').select('*').eq('po_number', poNumber);
       if (errItems) throw errItems;
 
-      const { data: logs, error: errLogs } = await supabaseClient
-        .from('scan_logs')
-        .select('lot_code, net_weight_kg')
-        .eq('po_number', poNumber);
-
+      const { data: logs, error: errLogs } = await supabaseClient.from('scan_logs').select('lot_code, net_weight_kg').eq('po_number', poNumber);
       if (errLogs) throw errLogs;
 
       const poHeader = allOrdersData.find(o => o.po_number === poNumber);
@@ -890,23 +845,13 @@ function initScannerPage() {
     if (e.key === 'Enter') {
       const rawBarcode = barcodeInput.value.trim();
       barcodeInput.value = '';
-
-      if (!activePO) {
-        triggerFeedback('error');
-        showFeedback('⚠️ Tolong PILIH PO TARGET terlebih dahulu!', 'warning');
-        return;
-      }
-
-      if (rawBarcode) {
-        await processScan(rawBarcode);
-      }
+      if (!activePO) return triggerFeedback('error'), showFeedback('⚠️ Tolong PILIH PO TARGET terlebih dahulu!', 'warning');
+      if (rawBarcode) await processScan(rawBarcode);
     }
   });
 
   function parseHMSBarcode(snString) {
-    if (!snString || snString.length !== 31) {
-      return { isValid: false, message: "Barcode harus 31 Karakter!" };
-    }
+    if (!snString || snString.length !== 31) return { isValid: false, message: "Barcode harus 31 Karakter!" };
     return {
       isValid: true,
       serialNumber: snString,
@@ -922,50 +867,30 @@ function initScannerPage() {
 
   async function processScan(rawBarcode) {
     const parsed = parseHMSBarcode(rawBarcode);
-
-    if (!parsed.isValid) {
-      triggerFeedback('error');
-      showFeedback(`❌ ${parsed.message}`, 'error');
-      return;
-    }
+    if (!parsed.isValid) return triggerFeedback('error'), showFeedback(`❌ ${parsed.message}`, 'error');
 
     if (skuMasterMap.size > 0 && !skuMasterMap.has(parsed.lotCode)) {
-      triggerFeedback('error');
-      showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Contact Admin.`, 'error');
-      return;
+      return triggerFeedback('error'), showFeedback(`⚠️ LOT [${parsed.lotCode}] BELUM TERDAFTAR di SKU Master! Contact Admin.`, 'error');
     }
 
     const stdNetWeight = skuMasterMap.get(parsed.lotCode) || 200.0;
     const matchedLot = poItems.find(i => i.lot_code === parsed.lotCode);
-
-    if (!matchedLot) {
-      triggerFeedback('error');
-      showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
-      return;
-    }
+    if (!matchedLot) return triggerFeedback('error'), showFeedback(`❌ LOT ${parsed.lotCode} TIDAK ADA dalam PO ${activePO}!`, 'error');
 
     const scannedWeightCt = parsed.netWeight / stdNetWeight;
     const projectedCt = matchedLot.scanned_ct + scannedWeightCt;
     const maxAllowedCt = Number(matchedLot.qty_usage_ct);
 
     if (projectedCt > maxAllowedCt + 0.05) {
-      triggerFeedback('error');
-      showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT)`, 'error');
-      return;
+      return triggerFeedback('error'), showFeedback(`❌ OVER PICKING! LOT [${parsed.lotCode}] sudah FULFILLED (Target: ${maxAllowedCt} CT)`, 'error');
     }
 
-    // CHECK DUPLICATE SN
-    const { data: existingSNs } = await supabaseClient
-      .from('scan_logs')
-      .select('po_number')
-      .eq('serial_number', parsed.serialNumber);
+    const { data: existingSNs } = await supabaseClient.from('scan_logs').select('po_number').eq('serial_number', parsed.serialNumber);
 
     if (existingSNs && existingSNs.length > 0) {
       const samePOScan = existingSNs.find(s => s.po_number === activePO);
       if (samePOScan) {
-        triggerFeedback('error');
-        showFeedback(`❌ DUPLICATE SN! Barcode [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN pada PO ini (${activePO})!`, 'error');
-        return;
+        return triggerFeedback('error'), showFeedback(`❌ DUPLICATE SN! Barcode [${parsed.serialNumber}] SUDAH PERNAH DI-SCAN pada PO ini (${activePO})!`, 'error');
       } else {
         const otherPO = existingSNs[0].po_number;
         pendingScanData = { parsed, isBypassed: true };
@@ -980,24 +905,21 @@ function initScannerPage() {
 
   async function executeSaveScan(parsedData, isBypassed) {
     try {
-      const { error } = await supabaseClient
-        .from('scan_logs')
-        .insert([{
-          po_number: activePO,
-          serial_number: parsedData.serialNumber,
-          lot_code: parsedData.lotCode,
-          pmi_run_no: parsedData.pmiRunNo,
-          case_number: parsedData.caseNo,
-          gross_weight_kg: parsedData.grossWeight,
-          net_weight_kg: parsedData.netWeight,
-          moisture: parsedData.moisture,
-          grade_code: parsedData.gradeCode,
-          is_bypassed: isBypassed,
-          scanned_by: 'operator_rf1'
-        }]);
+      const { error } = await supabaseClient.from('scan_logs').insert([{
+        po_number: activePO,
+        serial_number: parsedData.serialNumber,
+        lot_code: parsedData.lotCode,
+        pmi_run_no: parsedData.pmiRunNo,
+        case_number: parsedData.caseNo,
+        gross_weight_kg: parsedData.grossWeight,
+        net_weight_kg: parsedData.netWeight,
+        moisture: parsedData.moisture,
+        grade_code: parsedData.gradeCode,
+        is_bypassed: isBypassed,
+        scanned_by: 'operator_rf1'
+      }]);
 
       if (error) throw error;
-
       triggerFeedback('success');
       showFeedback(`✅ [${parsedData.lotCode}] SN OK! (+${parsedData.netWeight} KG)`, 'success');
       await fetchPODetails(activePO);
@@ -1009,7 +931,6 @@ function initScannerPage() {
 
   btnCopyWA.addEventListener('click', () => {
     if (!activePO || poItems.length === 0) return;
-
     const sampleItem = poItems[0];
     const totalTargetCT = poItems.reduce((s, i) => s + Number(i.qty_usage_ct), 0);
     const totalScannedCT = poItems.reduce((s, i) => s + Number(i.scanned_ct), 0);
@@ -1022,15 +943,11 @@ function initScannerPage() {
       return `  ${statusIcon} *${item.lot_code}*: ${item.scanned_ct}/${item.qty_usage_ct} CT`;
     }).join("\n");
 
-    const todayStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
-
     const waMessage = 
 `${headerStatus}
 🏢 *WHID:* ${activeWHID || 'WH01'}
 📌 *PO NUMBER:* ${activePO}
 📦 *BLEND:* ${sampleItem.blend_code || '-'}
-⏰ *RIT/TIME:* ${sampleItem.arrival_time ? sampleItem.arrival_time.substring(0, 5) : '-'}
-📅 *DATE:* ${todayStr}
 
 📊 *PROGRESS OVERALL:* ${totalScannedCT.toFixed(1)} / ${totalTargetCT} CT (${pct}%)
 
@@ -1042,8 +959,6 @@ _Reported via RF Scanner App_`;
     navigator.clipboard.writeText(waMessage).then(() => {
       triggerFeedback('success');
       showFeedback('📋 Laporan WA berhasil di-copy ke clipboard!', 'success');
-    }).catch(err => {
-      showFeedback('Gagal copy text: ' + err, 'error');
     });
   });
 
@@ -1064,30 +979,18 @@ _Reported via RF Scanner App_`;
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Loading logs...</td></tr>';
 
     try {
-      const { data: logs, error } = await supabaseClient
-        .from('scan_logs')
-        .select('id, serial_number, lot_code, net_weight_kg, scanned_at')
-        .eq('po_number', activePO)
-        .order('scanned_at', { ascending: false });
-
+      const { data: logs, error } = await supabaseClient.from('scan_logs').select('id, serial_number, lot_code, net_weight_kg').eq('po_number', activePO).order('scanned_at', { ascending: false });
       if (error) throw error;
-
-      if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Belum ada item di-scan.</td></tr>';
-        return;
-      }
+      if (logs.length === 0) return tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Belum ada item di-scan.</td></tr>';
 
       tbody.innerHTML = '';
       logs.forEach(log => {
         const tr = document.createElement('tr');
-        const shortSN = '...' + log.serial_number.slice(-8);
         tr.innerHTML = `
           <td><strong>${log.lot_code}</strong></td>
-          <td>${shortSN}</td>
+          <td>...${log.serial_number.slice(-8)}</td>
           <td>${log.net_weight_kg} kg</td>
-          <td>
-            <button class="btn btn-delete btn-sm" onclick="deleteScanLog(${log.id})">Hapus</button>
-          </td>
+          <td><button class="btn btn-delete btn-sm" onclick="deleteScanLog(${log.id})">Hapus</button></td>
         `;
         tbody.appendChild(tr);
       });
@@ -1097,7 +1000,7 @@ _Reported via RF Scanner App_`;
   }
 
   window.deleteScanLog = async function(logId) {
-    if (!confirm("Yakin ingin menghapus scan item ini? Progress LOT akan berkurang.")) return;
+    if (!confirm("Yakin ingin menghapus scan item ini?")) return;
     try {
       const { error } = await supabaseClient.from('scan_logs').delete().eq('id', logId);
       if (error) throw error;
@@ -1129,11 +1032,7 @@ _Reported via RF Scanner App_`;
   function renderLotTable() {
     const tbody = document.getElementById('lotTableBody');
     tbody.innerHTML = '';
-
-    if(poItems.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#a0aec0;">Tidak ada LOT untuk PO ini.</td></tr>';
-      return;
-    }
+    if(poItems.length === 0) return tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#a0aec0;">Tidak ada LOT untuk PO ini.</td></tr>';
 
     poItems.forEach(item => {
       const tr = document.createElement('tr');
@@ -1186,15 +1085,8 @@ _Reported via RF Scanner App_`;
   });
 }
 
-// ==========================================
-// 4. ROUTER INITIALIZER
-// ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSkuMaster();
-  if (document.getElementById('barcodeInput')) {
-    initScannerPage();
-  }
-  if (document.getElementById('dropzoneOrder') || document.getElementById('dropzoneSku')) {
-    initAdminPage();
-  }
+  if (document.getElementById('barcodeInput')) initScannerPage();
+  if (document.getElementById('dropzoneOrder') || document.getElementById('dropzoneSku')) initAdminPage();
 });
