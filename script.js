@@ -690,6 +690,7 @@ async function generateOutboundPdfReport(dispatchId) {
       
     if (errOrders || !orders || orders.length === 0) throw new Error('Tidak ada PO di dalam RIT ini.');
 
+    // 4. Bangun Baris Tabel HTML
     let rowsHtml = '';
     orders.forEach(po => {
       const logsArray = po["vcp-op-staging_monitoring_logs"];
@@ -711,6 +712,7 @@ async function generateOutboundPdfReport(dispatchId) {
         </tr>`;
     });
 
+    // 5. Rangkai Seluruh Layout PDF (Tabel + 4 Foto Truk)
     const reportElement = document.createElement('div');
     reportElement.id = 'pdfReportTemplate';
     reportElement.innerHTML = `
@@ -763,6 +765,7 @@ async function generateOutboundPdfReport(dispatchId) {
     `;
 
     document.body.appendChild(reportElement);
+    
     const opt = {
       margin: 0.3,
       filename: `Evidence_Report_${session.rit_number.replace(/\s+/g, '_')}_${session.dispatch_date}.pdf`,
@@ -1363,8 +1366,6 @@ _Reported via VCP-OP RF Scanner App_`;
   btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
 
   btnSubmitDispatch.addEventListener('click', async () => {
-    const now = new Date();
-    const formattedTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const ritNum = document.getElementById('dispRit').value.trim();
     const vehicle = document.getElementById('dispVehicle').value.trim();
     if (!ritNum || !vehicle || !document.getElementById('photoTrapOutBefore').files[0] || !document.getElementById('photoTrapInBefore').files[0] || !document.getElementById('photoTrapOutAfter').files[0] || !document.getElementById('photoTrapInAfter').files[0]) {
