@@ -553,17 +553,49 @@ async function exportScanLogsToExcel() {
   }
 }
 
+// ==========================================
+// GENERATE PDF REPORT OUTBOUND MONITORING
+// ==========================================
 async function generateOutboundPdfReport(poTarget) {
+  if (poTarget === 'ALL') {
+    return showFeedback('❌ Silakan pilih 1 spesifik PO dari dropdown untuk mencetak PDF Outbound (RIT Report).', 'error');
+  }
+
   showFeedback('⏳ Generating PDF Report...', 'warning');
   try {
-    let query = supabaseClient.from('orders').select('*, staging_monitoring_logs(*)');
-    if (poTarget !== 'ALL') query = query.eq('po_number', poTarget);
+    // 1. Cek Dispatch ID dari PO yang dipilih
+    const { data: targetOrder, error: errTarget } = await supabaseClient
+      .from('orders')
+      .select('dispatch_id')
+      .eq('po_number', poTarget)
+      .single();
 
-    const { data: orders, error } = await query;
-    if (error || !orders || orders.length === 0) throw new Error('Data PO / Staging Logs tidak ditemukan.');
+    if (errTarget || !targetOrder) throw new Error('PO tidak ditemukan di database.');
+    if (!targetOrder.dispatch_id) throw new Error('PO ini belum di-Loading/Dispatch! Selesaikan proses loading di Scanner terlebih dahulu.');
 
+    const dispatchId = targetOrder.dispatch_id;
+
+    // 2. Fetch Data Truk / Dispatch Session
+    const { data: session, error: errSession } = await supabaseClient
+      .from('outbound_dispatch_sessions')
+      .select('*')
+      .eq('id', dispatchId)
+      .single();
+
+    if (errSession || !session) throw new Error('Data sesi Loading Truk tidak ditemukan.');
+
+    // 3. Fetch SEMUA PO yang tergabung dalam Truk (RIT) ini beserta log fotonya
+    const { data: orders, error: errOrders } = await supabaseClient
+      .from('orders')
+      .select('*, staging_monitoring_logs(*)')
+      .eq('dispatch_id', dispatchId);
+
+    if (errOrders || !orders || orders.length === 0) throw new Error('Gagal mengambil data list PO di dalam RIT ini.');
+
+    // 4. Bangun Baris Tabel HTML
     let rowsHtml = '';
     orders.forEach(po => {
+      // Ambil log staging terbaru untuk PO ini
       const log = po.staging_monitoring_logs && po.staging_monitoring_logs.length > 0 
         ? po.staging_monitoring_logs[po.staging_monitoring_logs.length - 1] 
         : {};
@@ -585,21 +617,27 @@ async function generateOutboundPdfReport(poTarget) {
       `;
     });
 
+    // 5. Rangkai Seluruh Layout PDF (Tabel + 4 Foto Truk)
     const reportElement = document.createElement('div');
     reportElement.id = 'pdfReportTemplate';
     reportElement.innerHTML = `
       <style>
         #pdfReportTemplate { font-family: Arial, sans-serif; padding: 15px; color: #1e293b; font-size: 10px; }
         .report-header { border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; margin-bottom: 10px; }
-        .report-title { font-size: 14px; font-weight: bold; color: #1e3a8a; }
+        .report-title { font-size: 14px; font-weight: bold; color: #1e3a8a; text-transform: uppercase; }
         .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
         .report-table th, .report-table td { border: 1px solid #cbd5e1; padding: 4px; text-align: center; vertical-align: middle; }
         .report-table th { background-color: #f1f5f9; font-weight: bold; }
         .pdf-img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
       </style>
+      
       <div class="report-header">
-        <div class="report-title">Evidence Monitoring Outbound | ${new Date().toLocaleDateString('id-ID')}</div>
+        <div class="report-title">Evidence Monitoring Outbound | ${session.dispatch_date} | ${session.rit_number}</div>
+        <div style="background-color: #fef08a; padding: 6px; margin-top:6px; font-weight:bold; display:inline-block; border-radius:4px;">
+           Berikut Evidence Monitoring untuk pengiriman RRP pada ${session.dispatch_date} ${session.rit_number} ETA ${session.eta_time || '06:00'}
+        </div>
       </div>
+      
       <table class="report-table">
         <thead>
           <tr>
@@ -621,12 +659,36 @@ async function generateOutboundPdfReport(poTarget) {
         </thead>
         <tbody>${rowsHtml}</tbody>
       </table>
+
+      <!-- Section 4 Foto Mobile Trap Dalam Unit (UPDATE) -->
+      <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
+        <strong style="font-size: 11px;">FOTO EVIDENCE MOBILE TRAP DALAM UNIT (${session.rit_number} - ${session.vehicle_number || 'Truk'}):</strong>
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 8px;">
+          <div style="text-align:center;">
+            <img src="${session.photo_trap_out_before_url || ''}" style="width: 160px; height: 120px; object-fit: cover; border-radius:6px; border:1px solid #999;" onerror="this.style.display='none'"/><br>
+            <small><b>Luar (Before Loading)</b></small>
+          </div>
+          <div style="text-align:center;">
+            <img src="${session.photo_trap_in_before_url || ''}" style="width: 160px; height: 120px; object-fit: cover; border-radius:6px; border:1px solid #999;" onerror="this.style.display='none'"/><br>
+            <small><b>Dalam (Before Loading)</b></small>
+          </div>
+          <div style="text-align:center;">
+            <img src="${session.photo_trap_out_after_url || ''}" style="width: 160px; height: 120px; object-fit: cover; border-radius:6px; border:1px solid #999;" onerror="this.style.display='none'"/><br>
+            <small><b>Luar (After Loading)</b></small>
+          </div>
+          <div style="text-align:center;">
+            <img src="${session.photo_trap_in_after_url || ''}" style="width: 160px; height: 120px; object-fit: cover; border-radius:6px; border:1px solid #999;" onerror="this.style.display='none'"/><br>
+            <small><b>Dalam (After Loading)</b></small>
+          </div>
+        </div>
+      </div>
     `;
 
     document.body.appendChild(reportElement);
+    
     const opt = {
       margin: 0.3,
-      filename: `Evidence_Report_${poTarget}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: `Evidence_Report_${session.rit_number.replace(/\s+/g, '_')}_${session.dispatch_date}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' }
@@ -639,19 +701,6 @@ async function generateOutboundPdfReport(poTarget) {
     showFeedback(`❌ Gagal generate PDF: ${err.message}`, 'error');
   }
 }
-
-window.deletePO = async function(poNumber) {
-  if (!confirm(`Yakin ingin menghapus PO [${poNumber}] beserta seluruh LOT terkait?`) || !supabaseClient) return;
-  try {
-    const { error } = await supabaseClient.from('orders').delete().eq('po_number', poNumber);
-    if (error) throw error;
-    showFeedback(`🗑️ PO [${poNumber}] berhasil dihapus!`, 'success');
-    await loadMasterData();
-    await populateExportPODropdown();
-  } catch (err) {
-    showFeedback(`❌ Delete error: ${err.message}`, 'error');
-  }
-};
 
 // ==========================================
 // SCANNER MODULE
@@ -1187,26 +1236,35 @@ function initScannerPage() {
   btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
 
   btnSubmitDispatch.addEventListener('click', async () => {
-    const now = new Date();
-    const formattedTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const ritNum = document.getElementById('dispRit').value.trim();
     const vehicle = document.getElementById('dispVehicle').value.trim();
-    const photoBefore = document.getElementById('photoTrapBefore').files[0];
-    const photoAfter = document.getElementById('photoTrapAfter').files[0];
+    
+    // Ambil 4 File Foto
+    const photoOutBefore = document.getElementById('photoTrapOutBefore').files[0];
+    const photoInBefore = document.getElementById('photoTrapInBefore').files[0];
+    const photoOutAfter = document.getElementById('photoTrapOutAfter').files[0];
+    const photoInAfter = document.getElementById('photoTrapInAfter').files[0];
 
-    if (!ritNum || !vehicle || !photoBefore || !photoAfter) {
-      return showFeedback('❌ Semua field RIT, Kendaraan, dan 2 Foto wajib diisi!', 'error');
+    if (!ritNum || !vehicle || !photoOutBefore || !photoInBefore || !photoOutAfter || !photoInAfter) {
+      return showFeedback('❌ Semua field RIT, Kendaraan, dan 4 Foto Trap wajib diisi!', 'error');
     }
 
     btnSubmitDispatch.disabled = true;
     btnSubmitDispatch.innerText = '⏳ Memproses Loading...';
+    
+    const now = new Date();
+    const formattedTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
     try {
-      const urlBefore = await uploadPhotoToSupabase(photoBefore, 'trap_before');
-      const urlAfter = await uploadPhotoToSupabase(photoAfter, 'trap_after');
+      // Upload ke-4 foto secara berurutan
+      const urlOutBefore = await uploadPhotoToSupabase(photoOutBefore, 'trap_out_before');
+      const urlInBefore = await uploadPhotoToSupabase(photoInBefore, 'trap_in_before');
+      const urlOutAfter = await uploadPhotoToSupabase(photoOutAfter, 'trap_out_after');
+      const urlInAfter = await uploadPhotoToSupabase(photoInAfter, 'trap_in_after');
+      
       const dispatchCode = `DISP-${Date.now()}-${ritNum.replace(/\s+/g, '')}`;
 
-      // 1. Create Dispatch Session
+      // 1. Create Dispatch Session dengan 4 kolom URL baru
       const { data: sessionData, error: errSession } = await supabaseClient
         .from('outbound_dispatch_sessions')
         .insert([{
@@ -1214,9 +1272,11 @@ function initScannerPage() {
           wh_id: activeWHID || 'WH01',
           rit_number: ritNum,
           vehicle_number: vehicle,
-          eta_time: formattedTime, // <--- UBAH BAGIAN INI
-          photo_mobile_trap_before_url: urlBefore,
-          photo_mobile_trap_after_url: urlAfter
+          eta_time: formattedTime,
+          photo_trap_out_before_url: urlOutBefore,
+          photo_trap_in_before_url: urlInBefore,
+          photo_trap_out_after_url: urlOutAfter,
+          photo_trap_in_after_url: urlInAfter
         }])
         .select()
         .single();
@@ -1233,15 +1293,21 @@ function initScannerPage() {
 
       showFeedback('🎉 Loading Berhasil! PO telah di-Dispatch.', 'success');
       modalDispatch.style.display = 'none';
+      
+      // Reset Form
       document.getElementById('dispRit').value = '';
       document.getElementById('dispVehicle').value = '';
+      document.getElementById('photoTrapOutBefore').value = '';
+      document.getElementById('photoTrapInBefore').value = '';
+      document.getElementById('photoTrapOutAfter').value = '';
+      document.getElementById('photoTrapInAfter').value = '';
     } catch (err) {
       showFeedback(`❌ Error Dispatch: ${err.message}`, 'error');
     } finally {
       btnSubmitDispatch.disabled = false;
       btnSubmitDispatch.innerText = '🚀 Selesaikan Loading & Generate Link';
     }
-  });  
+  });
 
   document.getElementById('btnCancelScan').addEventListener('click', closeBypassModal);
   document.getElementById('btnBypassScan').addEventListener('click', async () => {
