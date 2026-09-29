@@ -1153,8 +1153,8 @@ function initScannerPage() {
         po_number: activePO,
         wh_id: activeWHID || 'WH01',
         nomor_kain_mori: kainMori,
-        total_box: document.getElementById('monTotalBox').value,
-        serrico_trap_qty: document.getElementById('monSerricoQty').value,
+        total_box: parseFloat(document.getElementById('monTotalBox').value) || 0, // <-- Gunakan parseFloat
+        serrico_trap_qty: parseInt(document.getElementById('monSerricoQty').value) || 0, // <-- Gunakan parseInt
         photo_mori_url: urlMori,
         photo_serrico_out_url: urlOut,
         photo_serrico_in_url: urlIn,
