@@ -50,13 +50,18 @@
       <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
     </div>
     
-    <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
+  <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
       <div><strong>WHID:</strong> <span id="lblWhId">-</span> | <strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Time:</strong> <span id="lblTime">-</span></div>
       <div style="margin-top: 4px;">
         <strong>Progress PO:</strong> <span id="lblProgressText">0 / 0 CT</span>
         <div class="progress-bar-bg">
           <div id="progressBar" class="progress-bar-fill"></div>
         </div>
+      </div>
+      <!-- Tombol Aksi Baru -->
+      <div style="margin-top: 10px; display: flex; gap: 6px;">
+        <button id="btnOpenMonitoring" class="btn btn-primary btn-sm" style="flex: 1;">📸 Update Monitoring</button>
+        <button id="btnOpenDispatch" class="btn btn-success btn-sm" style="flex: 1;">🚚 Proses Loading</button>
       </div>
     </div>
   </div>
@@ -120,6 +125,80 @@
             <tr><td colspan="4" style="text-align:center;">Loading logs...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalMonitoring" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>📸 Monitoring Staging (PO: <span id="monPoNum"></span>)</span>
+        <button id="btnCloseMonitoring" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nomor Kain Mori:</label>
+          <input type="text" id="monKainMori" placeholder="Contoh: KM-0812" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Total Box:</label>
+            <input type="number" id="monTotalBox" readonly style="background: #edf2f7;" />
+          </div>
+          <div class="form-group">
+            <label>Serrico Qty:</label>
+            <input type="number" id="monSerricoQty" readonly style="background: #edf2f7;" />
+          </div>
+        </div>
+        <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
+        <div class="form-group">
+          <label>📷 Foto Material + Kain Mori:</label>
+          <input type="file" id="photoMori" accept="image/*" capture="environment" />
+        </div>
+        <div class="form-group">
+          <label>📷 Foto Serrico (Luar):</label>
+          <input type="file" id="photoSerricoOut" accept="image/*" capture="environment" />
+        </div>
+        <div class="form-group">
+          <label>📷 Foto Serrico (Dalam):</label>
+          <input type="file" id="photoSerricoIn" accept="image/*" capture="environment" />
+        </div>
+        <div class="form-group" style="margin-top: 15px;">
+          <button id="btnSubmitMonitoring" class="btn btn-primary" style="width: 100%;">💾 Simpan Evidence Monitoring</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalDispatch" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>🚚 Proses Loading (Outbound)</span>
+        <button id="btnCloseDispatch" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>No. RIT:</label>
+            <input type="text" id="dispRit" placeholder="Contoh: RIT 1" />
+          </div>
+          <div class="form-group">
+            <label>Plat Kendaraan:</label>
+            <input type="text" id="dispVehicle" placeholder="Contoh: B 1234 CD" />
+          </div>
+        </div>
+        <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
+        <div class="form-group">
+          <label>📷 Trap Dalam Unit (BEFORE):</label>
+          <input type="file" id="photoTrapBefore" accept="image/*" capture="environment" />
+        </div>
+        <div class="form-group">
+          <label>📷 Trap Dalam Unit (AFTER):</label>
+          <input type="file" id="photoTrapAfter" accept="image/*" capture="environment" />
+        </div>
+        <div class="form-group" style="margin-top: 15px;">
+          <button id="btnSubmitDispatch" class="btn btn-success" style="width: 100%;">🚀 Selesaikan Loading & Generate Link</button>
+        </div>
       </div>
     </div>
   </div>

@@ -669,6 +669,16 @@ function initScannerPage() {
   const modalBypass = document.getElementById('modalBypass');
   const modalLogs = document.getElementById('modalLogs');
 
+  const btnOpenMonitoring = document.getElementById('btnOpenMonitoring');
+  const btnCloseMonitoring = document.getElementById('btnCloseMonitoring');
+  const modalMonitoring = document.getElementById('modalMonitoring');
+  const btnSubmitMonitoring = document.getElementById('btnSubmitMonitoring');
+
+  const btnOpenDispatch = document.getElementById('btnOpenDispatch');
+  const btnCloseDispatch = document.getElementById('btnCloseDispatch');
+  const modalDispatch = document.getElementById('modalDispatch');
+  const btnSubmitDispatch = document.getElementById('btnSubmitDispatch');
+
   fetchAllOrders();
   keepInputFocused();
 
@@ -944,17 +954,17 @@ function initScannerPage() {
     }).join("\n");
 
     const waMessage = 
-`${headerStatus}
-🏢 *WHID:* ${activeWHID || 'WH01'}
-📌 *PO NUMBER:* ${activePO}
-📦 *BLEND:* ${sampleItem.blend_code || '-'}
+      `${headerStatus}
+      🏢 *WHID:* ${activeWHID || 'WH01'}
+      📌 *PO NUMBER:* ${activePO}
+      📦 *BLEND:* ${sampleItem.blend_code || '-'}
 
-📊 *PROGRESS OVERALL:* ${totalScannedCT.toFixed(1)} / ${totalTargetCT} CT (${pct}%)
+      📊 *PROGRESS OVERALL:* ${totalScannedCT.toFixed(1)} / ${totalTargetCT} CT (${pct}%)
 
-*BREAKDOWN LOT:*
-${lotBreakdown}
+      *BREAKDOWN LOT:*
+      ${lotBreakdown}
 
-_Reported via RF Scanner App_`;
+      _Reported via RF Scanner App_`;
 
     navigator.clipboard.writeText(waMessage).then(() => {
       triggerFeedback('success');
@@ -1067,6 +1077,169 @@ _Reported via RF Scanner App_`;
     pendingScanData = null;
     barcodeInput.focus();
   }
+
+// IMAGE COMPRESSOR ENGINE (Mencegah upload lemot di gudang)
+  async function compressImage(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1024;
+          const scaleFactor = MAX_WIDTH / img.width;
+          canvas.width = img.width > MAX_WIDTH ? MAX_WIDTH : img.width;
+          canvas.height = img.width > MAX_WIDTH ? img.height * scaleFactor : img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.75); // Kompresi 75%
+        };
+      };
+    });
+  }
+
+  // UPLOAD TO SUPABASE STORAGE BUCKET
+  async function uploadPhotoToSupabase(file, prefix) {
+    if (!file) return null;
+    const compressedBlob = await compressImage(file);
+    const fileName = `${prefix}_${Date.now()}.jpg`;
+    const filePath = `${activePO}/${fileName}`;
+
+    const { error } = await supabaseClient.storage.from('staging-evidence').upload(filePath, compressedBlob, { contentType: 'image/jpeg' });
+    if (error) throw error;
+    
+    const { data } = supabaseClient.storage.from('staging-evidence').getPublicUrl(filePath);
+    return data.publicUrl;
+  }
+
+  // ---- LOGIC MONITORING STAGING ----
+  btnOpenMonitoring.addEventListener('click', () => {
+    if (!activePO) return;
+    document.getElementById('monPoNum').innerText = activePO;
+    
+    // Auto-calculate Total Box & Serrico Target
+    const totalTargetCT = poItems.reduce((s, i) => s + Number(i.qty_usage_ct), 0);
+    document.getElementById('monTotalBox').value = totalTargetCT;
+    document.getElementById('monSerricoQty').value = Math.ceil(totalTargetCT / 20); // 1 Trap per 20 Box
+    
+    modalMonitoring.style.display = 'flex';
+  });
+
+  btnCloseMonitoring.addEventListener('click', () => modalMonitoring.style.display = 'none');
+
+  btnSubmitMonitoring.addEventListener('click', async () => {
+    const kainMori = document.getElementById('monKainMori').value.trim();
+    const photoMori = document.getElementById('photoMori').files[0];
+    const photoOut = document.getElementById('photoSerricoOut').files[0];
+    const photoIn = document.getElementById('photoSerricoIn').files[0];
+
+    if (!kainMori || !photoMori || !photoOut || !photoIn) {
+      return showFeedback('❌ Nomor Kain Mori dan ke-3 Foto Wajib Diisi!', 'error');
+    }
+
+    btnSubmitMonitoring.disabled = true;
+    btnSubmitMonitoring.innerText = '⏳ Mengunggah Data & Foto...';
+
+    try {
+      // 1. Upload Photos
+      const urlMori = await uploadPhotoToSupabase(photoMori, 'mori');
+      const urlOut = await uploadPhotoToSupabase(photoOut, 'serrico_out');
+      const urlIn = await uploadPhotoToSupabase(photoIn, 'serrico_in');
+
+      // 2. Insert Database
+      const { error } = await supabaseClient.from('staging_monitoring_logs').insert([{
+        po_number: activePO,
+        wh_id: activeWHID || 'WH01',
+        nomor_kain_mori: kainMori,
+        total_box: document.getElementById('monTotalBox').value,
+        serrico_trap_qty: document.getElementById('monSerricoQty').value,
+        photo_mori_url: urlMori,
+        photo_serrico_out_url: urlOut,
+        photo_serrico_in_url: urlIn,
+        inspected_by: 'checker_rf1'
+      }]);
+
+      if (error) throw error;
+      showFeedback('✅ Monitoring Staging Berhasil Disimpan!', 'success');
+      modalMonitoring.style.display = 'none';
+      
+      // Reset Form
+      document.getElementById('monKainMori').value = '';
+      document.getElementById('photoMori').value = '';
+      document.getElementById('photoSerricoOut').value = '';
+      document.getElementById('photoSerricoIn').value = '';
+    } catch (err) {
+      showFeedback(`❌ Error Upload: ${err.message}`, 'error');
+    } finally {
+      btnSubmitMonitoring.disabled = false;
+      btnSubmitMonitoring.innerText = '💾 Simpan Evidence Monitoring';
+    }
+  });
+
+  // ---- LOGIC OUTBOUND DISPATCH ----
+  btnOpenDispatch.addEventListener('click', () => {
+    if (!activePO) return;
+    modalDispatch.style.display = 'flex';
+  });
+
+  btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
+
+  btnSubmitDispatch.addEventListener('click', async () => {
+    const ritNum = document.getElementById('dispRit').value.trim();
+    const vehicle = document.getElementById('dispVehicle').value.trim();
+    const photoBefore = document.getElementById('photoTrapBefore').files[0];
+    const photoAfter = document.getElementById('photoTrapAfter').files[0];
+
+    if (!ritNum || !vehicle || !photoBefore || !photoAfter) {
+      return showFeedback('❌ Semua field RIT, Kendaraan, dan 2 Foto wajib diisi!', 'error');
+    }
+
+    btnSubmitDispatch.disabled = true;
+    btnSubmitDispatch.innerText = '⏳ Memproses Loading...';
+
+    try {
+      const urlBefore = await uploadPhotoToSupabase(photoBefore, 'trap_before');
+      const urlAfter = await uploadPhotoToSupabase(photoAfter, 'trap_after');
+      const dispatchCode = `DISP-${Date.now()}-${ritNum.replace(/\s+/g, '')}`;
+
+      // 1. Create Dispatch Session
+      const { data: sessionData, error: errSession } = await supabaseClient
+        .from('outbound_dispatch_sessions')
+        .insert([{
+          dispatch_code: dispatchCode,
+          wh_id: activeWHID || 'WH01',
+          rit_number: ritNum,
+          vehicle_number: vehicle,
+          eta_time: new Date().toLocaleTimeString('id-ID', { hour12: false, hour: "numeric", minute: "numeric" }),
+          photo_mobile_trap_before_url: urlBefore,
+          photo_mobile_trap_after_url: urlAfter
+        }])
+        .select()
+        .single();
+
+      if (errSession) throw errSession;
+
+      // 2. Update Order PO menjadi Dispatched
+      const { error: errOrder } = await supabaseClient
+        .from('orders')
+        .update({ dispatch_id: sessionData.id })
+        .eq('po_number', activePO);
+
+      if (errOrder) throw errOrder;
+
+      showFeedback('🎉 Loading Berhasil! PO telah di-Dispatch.', 'success');
+      modalDispatch.style.display = 'none';
+      document.getElementById('dispRit').value = '';
+      document.getElementById('dispVehicle').value = '';
+    } catch (err) {
+      showFeedback(`❌ Error Dispatch: ${err.message}`, 'error');
+    } finally {
+      btnSubmitDispatch.disabled = false;
+      btnSubmitDispatch.innerText = '🚀 Selesaikan Loading & Generate Link';
+    }
+  });  
 
   document.getElementById('btnCancelScan').addEventListener('click', closeBypassModal);
   document.getElementById('btnBypassScan').addEventListener('click', async () => {
