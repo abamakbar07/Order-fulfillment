@@ -1363,6 +1363,8 @@ _Reported via VCP-OP RF Scanner App_`;
   btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
 
   btnSubmitDispatch.addEventListener('click', async () => {
+    const now = new Date();
+    const formattedTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const ritNum = document.getElementById('dispRit').value.trim();
     const vehicle = document.getElementById('dispVehicle').value.trim();
     if (!ritNum || !vehicle || !document.getElementById('photoTrapOutBefore').files[0] || !document.getElementById('photoTrapInBefore').files[0] || !document.getElementById('photoTrapOutAfter').files[0] || !document.getElementById('photoTrapInAfter').files[0]) {
