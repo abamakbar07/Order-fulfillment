@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - HMS Order Import & Management</title>
+  <title>Admin - HMS Order & SKU Management</title>
   
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -23,34 +23,79 @@
     <!-- FEEDBACK BANNER -->
     <div id="statusBanner" class="banner"></div>
 
-    <!-- IMPORT SECTION -->
+    <!-- SECTION 1: UPLOAD SKU MASTER TEMPLATE -->
     <div class="card">
       <div class="header-title">
-        <span>1. Import / Upload Order HMS (Excel / CSV)</span>
-        <button id="btnSaveToDb" class="btn btn-success" style="display:none;">💾 Simpan ke Database</button>
+        <span>1. Upload SKU Master & Net Weight Template</span>
+        <div>
+          <button id="btnDownloadSkuTemplate" class="btn btn-secondary btn-sm" style="margin-right: 4px;">📥 Template SKU</button>
+          <button id="btnSaveSkuMaster" class="btn btn-success btn-sm" style="display:none;">💾 Simpan Master SKU</button>
+        </div>
+      </div>
+      <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
+        Upload file Excel/CSV berisi daftar SKU/Lot dan Standar Net Weight (kg) sebelum mengunggah Order.
+      </p>
+
+      <div class="dropzone" id="dropzoneSku">
+        <p>🏷️ Drag & Drop / Klik untuk Upload File SKU Master</p>
+        <span>Format support: .xlsx, .xls, .csv (Kolom: Lot/SKU, Net Weight)</span>
+        <input type="file" id="fileInputSku" accept=".xlsx, .xls, .csv" style="display: none;" />
       </div>
 
-      <div class="dropzone" id="dropzone">
-        <p>📁 Klik atau Drag & Drop File Excel/CSV di sini</p>
-        <span>Format support: .xlsx, .xls, .csv</span>
-        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
-      </div>
-
-      <!-- PREVIEW TABLE -->
-      <div id="previewArea" style="display: none; margin-top: 15px;">
+      <!-- PREVIEW SKU MASTER TABLE -->
+      <div id="previewSkuArea" style="display: none; margin-top: 15px;">
         <div style="font-weight: bold; color: #4a5568; margin-bottom: 5px;">
-          Preview Data Draft (<span id="draftCount">0</span> rows - Duplikat LOT digabungkan):
+          Preview SKU Master (<span id="draftSkuCount">0</span> items):
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
+                <th>SKU / Lot Code</th>
+                <th>Standard Net Weight (kg)</th>
+              </tr>
+            </thead>
+            <tbody id="previewSkuTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: IMPORT ORDER HMS -->
+    <div class="card">
+      <div class="header-title">
+        <span>2. Import Order HMS (Excel / CSV)</span>
+        <div>
+          <button id="btnDownloadOrderTemplate" class="btn btn-secondary btn-sm" style="margin-right: 4px;">📥 Template Order</button>
+          <button id="btnSaveToDb" class="btn btn-success btn-sm" style="display:none;">💾 Simpan Order ke Database</button>
+        </div>
+      </div>
+      <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
+        Wajib: <strong>PO Number, SKU / Lot Code, Qty (CT)</strong>. Opsional: WHID, Date, Time, Blend.
+      </p>
+
+      <div class="dropzone" id="dropzoneOrder">
+        <p>📁 Drag & Drop / Klik untuk Upload File Order</p>
+        <span>Format support: .xlsx, .xls, .csv</span>
+        <input type="file" id="fileInputOrder" accept=".xlsx, .xls, .csv" style="display: none;" />
+      </div>
+
+      <!-- PREVIEW ORDER TABLE -->
+      <div id="previewArea" style="display: none; margin-top: 15px;">
+        <div style="font-weight: bold; color: #4a5568; margin-bottom: 5px;">
+          Preview Order Draft (<span id="draftCount">0</span> items unik):
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>WHID</th>
                 <th>PO Number</th>
-                <th>Blend</th>
-                <th>Lot Code</th>
+                <th>SKU / Lot Code</th>
                 <th>Qty Usage (CT)</th>
                 <th>Arrival Date</th>
                 <th>Arrival Time</th>
+                <th>Blend</th>
               </tr>
             </thead>
             <tbody id="previewTbody"></tbody>
@@ -59,10 +104,10 @@
       </div>
     </div>
 
-    <!-- NEW TOOL: EXPORT DETAIL SCAN LOGS -->
+    <!-- SECTION 3: EXPORT DETAIL SCAN REPORT -->
     <div class="card">
       <div class="header-title">
-        <span>2. Export Detail Scan Report (Excel)</span>
+        <span>3. Export Detail Scan Report (Excel)</span>
       </div>
       <div class="form-row" style="align-items: flex-end;">
         <div class="form-group" style="flex: 2;">
@@ -77,10 +122,10 @@
       </div>
     </div>
 
-    <!-- MASTER DATA PO TABLE -->
+    <!-- SECTION 4: MASTER DATA PO TABLE -->
     <div class="card">
       <div class="header-title">
-        <span>3. Master Data Order & Lot Terdaftar</span>
+        <span>4. Master Data Order Terdaftar</span>
         <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
       </div>
 
@@ -88,6 +133,7 @@
         <table>
           <thead>
             <tr>
+              <th>WHID</th>
               <th>PO Number</th>
               <th>Blend</th>
               <th>Arrival Date</th>
@@ -97,11 +143,12 @@
             </tr>
           </thead>
           <tbody id="masterPoTbody">
-            <tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>
+            <tr><td colspan="7" style="text-align: center;">Loading data master...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
+
   </div>
 
   <script src="script.js"></script>

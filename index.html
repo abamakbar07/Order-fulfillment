@@ -24,34 +24,37 @@
       </div>
     </div>
 
-    <!-- FILTER BERTINGKAT (WEEK -> TANGGAL -> RIT) -->
+    <!-- FILTER STEP 1: SELECT WHID -->
+    <div class="form-group">
+      <label for="whSelect">1. PILIH WAREHOUSE ID (WHID):</label>
+      <select id="whSelect"><option value="">-- Pilih WHID --</option></select>
+    </div>
+
+    <!-- FILTER STEP 2: SELECT DATE / WEEK (FILTERED BY WHID) -->
     <div class="form-row">
       <div class="form-group">
-        <label for="weekSelect">1. Week:</label>
-        <select id="weekSelect"><option value="">- Week -</option></select>
+        <label for="weekSelect">2. Week:</label>
+        <select id="weekSelect" disabled><option value="">- Week -</option></select>
       </div>
       <div class="form-group">
-        <label for="dateSelect">2. Tanggal:</label>
+        <label for="dateSelect">3. Tanggal:</label>
         <select id="dateSelect" disabled><option value="">- Date -</option></select>
-      </div>
-      <div class="form-group">
-        <label for="ritSelect">3. Rit/Time:</label>
-        <select id="ritSelect" disabled><option value="">- Rit -</option></select>
       </div>
     </div>
     
+    <!-- FILTER STEP 3: SELECT PO -->
     <div class="form-group" style="margin-top: 4px;">
       <label for="poSelect">
         4. Target PO: 
         <span class="toggle-manual" id="btnToggleManual">Input Manual PO?</span>
       </label>
-      <select id="poSelect" disabled><option value="">-- Pilih Filter Di Atas --</option></select>
+      <select id="poSelect" disabled><option value="">-- Pilih WHID & Filter Dahulu --</option></select>
       <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
     </div>
     
     <!-- PO SUMMARY AREA -->
     <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
-      <div><strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Time:</strong> <span id="lblTime">-</span></div>
+      <div><strong>WHID:</strong> <span id="lblWhId">-</span> | <strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Time:</strong> <span id="lblTime">-</span></div>
       <div style="margin-top: 4px;">
         <strong>Progress PO:</strong> <span id="lblProgressText">0 / 0 CT</span>
         <div class="progress-bar-bg">

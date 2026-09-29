@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SUPABASE CONFIGURATION
+// 1. SUPABASE CONFIGURATION & GLOBAL STATES
 // ==========================================
 const SUPABASE_URL = 'https://dtrzkyjbdjngyuquajkk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_zZJ7aREpv6jjemYmrrWtUw_ZgoMD2Us';
@@ -8,6 +8,7 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
 
 // Scanner Global States
 let activePO = null;
+let activeWHID = null;
 let poItems = [];
 let allOrdersData = [];
 let pendingScanData = null;
@@ -15,7 +16,8 @@ let isManualMode = false;
 let skuMasterMap = new Map();
 
 // Admin Global States
-let parsedData = [];
+let parsedOrderData = [];
+let parsedSkuData = [];
 
 // Helper: Show Feedback Banner
 function showFeedback(msg, type) {
@@ -112,7 +114,6 @@ async function loadSkuMaster() {
   }
 }
 
-// Date & Time Excel Parsers
 function parseExcelDate(val) {
   if (!val && val !== 0) return new Date().toISOString().split('T')[0];
   if (typeof val === 'string' && (val.includes('-') || val.includes('/'))) return val.replace(/\//g, '-');
@@ -143,26 +144,42 @@ function parseExcelTime(val) {
 // 2. ADMIN PAGE MODULE (admin.html)
 // ==========================================
 function initAdminPage() {
-  const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('fileInput');
+  // Elements SKU Master
+  const dropzoneSku = document.getElementById('dropzoneSku');
+  const fileInputSku = document.getElementById('fileInputSku');
+  const btnSaveSkuMaster = document.getElementById('btnSaveSkuMaster');
+  const btnDownloadSkuTemplate = document.getElementById('btnDownloadSkuTemplate');
+
+  // Elements Order Import
+  const dropzoneOrder = document.getElementById('dropzoneOrder');
+  const fileInputOrder = document.getElementById('fileInputOrder');
   const btnSaveToDb = document.getElementById('btnSaveToDb');
+  const btnDownloadOrderTemplate = document.getElementById('btnDownloadOrderTemplate');
+
   const btnRefresh = document.getElementById('btnRefresh');
   const btnExportLogs = document.getElementById('btnExportLogs');
 
-  if (dropzone && fileInput) {
-    dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.backgroundColor = '#e2e8f0'; });
-    dropzone.addEventListener('dragleave', () => { dropzone.style.backgroundColor = '#ebf8ff'; });
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.style.backgroundColor = '#ebf8ff';
-      if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length) handleFileSelect(e.target.files[0]);
+  // Download Template Listeners
+  if (btnDownloadSkuTemplate) btnDownloadSkuTemplate.addEventListener('click', downloadSkuTemplate);
+  if (btnDownloadOrderTemplate) btnDownloadOrderTemplate.addEventListener('click', downloadOrderTemplate);
+
+  // Listeners SKU Master Upload
+  if (dropzoneSku && fileInputSku) {
+    dropzoneSku.addEventListener('click', () => fileInputSku.click());
+    fileInputSku.addEventListener('change', (e) => {
+      if (e.target.files.length) handleSkuFileSelect(e.target.files[0]);
     });
   }
 
+  // Listeners Order Upload
+  if (dropzoneOrder && fileInputOrder) {
+    dropzoneOrder.addEventListener('click', () => fileInputOrder.click());
+    fileInputOrder.addEventListener('change', (e) => {
+      if (e.target.files.length) handleOrderFileSelect(e.target.files[0]);
+    });
+  }
+
+  if (btnSaveSkuMaster) btnSaveSkuMaster.addEventListener('click', saveSkuMasterToDb);
   if (btnSaveToDb) btnSaveToDb.addEventListener('click', saveToSupabase);
   if (btnRefresh) btnRefresh.addEventListener('click', loadMasterData);
   if (btnExportLogs) btnExportLogs.addEventListener('click', exportScanLogsToExcel);
@@ -171,7 +188,63 @@ function initAdminPage() {
   populateExportPODropdown();
 }
 
-function handleFileSelect(file) {
+// FUNCTION: GENERATE & DOWNLOAD SKU MASTER TEMPLATE
+function downloadSkuTemplate() {
+  const sampleSkuData = [
+    { lot_code: 'LB2370', std_net_weight_kg: 180 },
+    { lot_code: 'LB2625', std_net_weight_kg: 200 },
+    { lot_code: 'LG0770', std_net_weight_kg: 140 },
+    { lot_code: 'LT2224', std_net_weight_kg: 210 }
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(sampleSkuData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "SKU Master");
+  XLSX.writeFile(workbook, "Template_SKU_Master.xlsx");
+  showFeedback('📥 Template SKU Master berhasil di-download!', 'success');
+}
+
+// FUNCTION: GENERATE & DOWNLOAD ORDER HMS TEMPLATE
+function downloadOrderTemplate() {
+  const sampleOrderData = [
+    { 
+      wh_id: 'WH01', 
+      po_number: '101412213', 
+      lot_code: 'LB8333', 
+      qty_usage_ct: 10, 
+      arrival_date: '2026-09-08', 
+      arrival_time: '06:00', 
+      blend_code: 'AA60R' 
+    },
+    { 
+      wh_id: 'WH01', 
+      po_number: '101412213', 
+      lot_code: 'LG0778', 
+      qty_usage_ct: 5, 
+      arrival_date: '2026-09-08', 
+      arrival_time: '06:00', 
+      blend_code: 'AA60R' 
+    },
+    { 
+      wh_id: 'WH02', 
+      po_number: '101412214', 
+      lot_code: 'LB2370', 
+      qty_usage_ct: 8, 
+      arrival_date: '2026-09-09', 
+      arrival_time: '08:00', 
+      blend_code: 'AA60T' 
+    }
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(sampleOrderData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Order Import");
+  XLSX.writeFile(workbook, "Template_Order_HMS.xlsx");
+  showFeedback('📥 Template Order HMS berhasil di-download!', 'success');
+}
+
+// PARSE SKU MASTER FILE
+function handleSkuFileSelect(file) {
   const reader = new FileReader();
   reader.onload = function (e) {
     try {
@@ -181,20 +254,117 @@ function handleFileSelect(file) {
       const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
 
       if (rawRows.length === 0) {
-        showFeedback('❌ File kosong atau format tidak sesuai!', 'error');
+        showFeedback('❌ File SKU Master kosong!', 'error');
         return;
       }
-      processExcelRows(rawRows);
+      processSkuMasterRows(rawRows);
     } catch (err) {
-      showFeedback(`❌ Gagal membaca file: ${err.message}`, 'error');
+      showFeedback(`❌ Gagal membaca file SKU: ${err.message}`, 'error');
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
-// FIX: GABUNGKAN DUPLIKAT LOT PADA PO YANG SAMA
+function processSkuMasterRows(rawRows) {
+  parsedSkuData = [];
+  rawRows.forEach(row => {
+    const getVal = (keys) => {
+      for (let k of keys) {
+        const foundKey = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (foundKey && row[foundKey] !== undefined) return row[foundKey];
+      }
+      return '';
+    };
+
+    const lotCode = String(getVal(['lot_code', 'lot', 'sku', 'item'])).trim();
+    const netWeight = parseFloat(getVal(['std_net_weight_kg', 'net_weight', 'net', 'weight', 'berat'])) || 200.0;
+
+    if (lotCode) {
+      parsedSkuData.push({
+        lot_code: lotCode,
+        std_net_weight_kg: netWeight
+      });
+    }
+  });
+
+  if (parsedSkuData.length === 0) {
+    showFeedback('❌ Kolom SKU / Net Weight tidak terdeteksi!', 'error');
+    return;
+  }
+
+  // Render Preview SKU
+  const previewSkuTbody = document.getElementById('previewSkuTbody');
+  previewSkuTbody.innerHTML = '';
+  parsedSkuData.forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><strong>${item.lot_code}</strong></td><td>${item.std_net_weight_kg} kg</td>`;
+    previewSkuTbody.appendChild(tr);
+  });
+
+  document.getElementById('draftSkuCount').innerText = parsedSkuData.length;
+  document.getElementById('previewSkuArea').style.display = 'block';
+  document.getElementById('btnSaveSkuMaster').style.display = 'inline-block';
+  showFeedback(`✅ ${parsedSkuData.length} SKU Master siap disimpan.`, 'success');
+}
+
+async function saveSkuMasterToDb() {
+  if (parsedSkuData.length === 0 || !supabaseClient) return;
+
+  const btnSaveSkuMaster = document.getElementById('btnSaveSkuMaster');
+  btnSaveSkuMaster.disabled = true;
+  btnSaveSkuMaster.innerText = '⏳ Saving...';
+
+  try {
+    const { error } = await supabaseClient
+      .from('sku_master')
+      .upsert(parsedSkuData, { onConflict: 'lot_code' });
+
+    if (error) throw error;
+
+    showFeedback('🎉 SKU Master berhasil diperbarui!', 'success');
+    
+    // Reload local cache map SKU
+    await loadSkuMaster();
+    
+    document.getElementById('previewSkuArea').style.display = 'none';
+    btnSaveSkuMaster.style.display = 'none';
+
+    // Auto-revalidate Order Preview jika sedang ada draft yang pending
+    if (parsedOrderData.length > 0) {
+      renderPreviewOrderTable();
+    }
+  } catch (err) {
+    showFeedback(`❌ Gagal simpan SKU: ${err.message}`, 'error');
+  } finally {
+    btnSaveSkuMaster.disabled = false;
+    btnSaveSkuMaster.innerText = '💾 Simpan Master SKU';
+  }
+}
+
+// PARSE ORDER FILE (Mandatory: PO, SKU, Qty | Optional: WHID, Date, Time, Blend)
+function handleOrderFileSelect(file) {
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.SheetNames[0];
+      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
+
+      if (rawRows.length === 0) {
+        showFeedback('❌ File Order kosong!', 'error');
+        return;
+      }
+      processExcelRows(rawRows);
+    } catch (err) {
+      showFeedback(`❌ Gagal membaca file Order: ${err.message}`, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function processExcelRows(rawRows) {
-  const aggregatedMap = new Map(); // Key: `${poNumber}___${lotCode}`
+  const aggregatedMap = new Map();
 
   rawRows.forEach(row => {
     const getVal = (keys) => {
@@ -205,11 +375,14 @@ function processExcelRows(rawRows) {
       return '';
     };
 
+    // Mandatory
     const poNumber = String(getVal(['po_number', 'po number', 'po', 'no po'])).trim();
-    const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim();
-    const lotCode = String(getVal(['lot_code', 'lot code', 'lot'])).trim();
+    const lotCode = String(getVal(['lot_code', 'lot code', 'sku', 'lot'])).trim();
     const qtyUsage = parseFloat(getVal(['qty_usage_ct', 'qty usage', 'qty ct', 'qty', 'carton'])) || 1.0;
 
+    // Optional
+    const whId = String(getVal(['wh_id', 'whid', 'warehouse', 'wh'])).trim() || 'WH01';
+    const blendCode = String(getVal(['blend_code', 'blend code', 'blend'])).trim() || '-';
     const rawDate = getVal(['arrival_date', 'arrival date', 'date', 'tanggal']);
     const rawTime = getVal(['arrival_time', 'arrival time', 'time', 'jam', 'rit']);
 
@@ -220,12 +393,12 @@ function processExcelRows(rawRows) {
       const compositeKey = `${poNumber}___${lotCode}`;
 
       if (aggregatedMap.has(compositeKey)) {
-        // Gabungkan QTY jika PO + LOT sama
         const existing = aggregatedMap.get(compositeKey);
         existing.qty_usage_ct += qtyUsage;
         existing.qty_spare_ct += qtyUsage;
       } else {
         aggregatedMap.set(compositeKey, {
+          wh_id: whId,
           po_number: poNumber,
           blend_code: blendCode,
           lot_code: lotCode,
@@ -239,18 +412,18 @@ function processExcelRows(rawRows) {
     }
   });
 
-  parsedData = Array.from(aggregatedMap.values());
+  parsedOrderData = Array.from(aggregatedMap.values());
 
-  if (parsedData.length === 0) {
-    showFeedback('❌ Kolom Excel tidak terdeteksi. Pastikan ada kolom "PO Number" dan "Lot Code"', 'error');
+  if (parsedOrderData.length === 0) {
+    showFeedback('❌ Format tidak sesuai. Pastikan ada kolom "PO" dan "SKU / Lot Code"', 'error');
     return;
   }
 
-  renderPreviewTable();
-  showFeedback(`✅ Berhasil membaca ${parsedData.length} item LOT unik (duplikat baris otomatis digabungkan).`, 'success');
+  renderPreviewOrderTable();
+  showFeedback(`✅ ${parsedOrderData.length} item Order unik siap disimpan.`, 'success');
 }
 
-function renderPreviewTable() {
+function renderPreviewOrderTable() {
   const previewTbody = document.getElementById('previewTbody');
   const draftCount = document.getElementById('draftCount');
   const previewArea = document.getElementById('previewArea');
@@ -259,38 +432,71 @@ function renderPreviewTable() {
   if (!previewTbody) return;
   previewTbody.innerHTML = '';
 
-  parsedData.forEach(item => {
+  let missingSkus = new Set();
+
+  parsedOrderData.forEach(item => {
+    // Cek ketersediaan LOT di SKU Master Map
+    const isSkuValid = skuMasterMap.has(item.lot_code);
+    if (!isSkuValid) {
+      missingSkus.add(item.lot_code);
+    }
+
     const tr = document.createElement('tr');
+    if (!isSkuValid) {
+      tr.style.backgroundColor = '#fff5f5'; // Red tint for unregistered SKU
+    }
+
     tr.innerHTML = `
+      <td><strong>${item.wh_id}</strong></td>
       <td><strong>${item.po_number}</strong></td>
-      <td>${item.blend_code}</td>
-      <td>${item.lot_code}</td>
+      <td>
+        <strong style="${!isSkuValid ? 'color: #e53e3e;' : ''}">${item.lot_code}</strong>
+        ${!isSkuValid ? '<span class="status-badge" style="background:#fed7d7; color:#742a2a; margin-left:6px;">⚠️ SKU UNREGISTERED</span>' : ''}
+      </td>
       <td>${item.qty_usage_ct} CT</td>
       <td>${item.arrival_date}</td>
       <td>${item.arrival_time}</td>
+      <td>${item.blend_code}</td>
     `;
     previewTbody.appendChild(tr);
   });
 
-  if (draftCount) draftCount.innerText = parsedData.length;
+  if (draftCount) draftCount.innerText = parsedOrderData.length;
   if (previewArea) previewArea.style.display = 'block';
-  if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block';
+
+  // VALIDASI SKU BLOCKER
+  if (missingSkus.size > 0) {
+    const unregList = Array.from(missingSkus).join(', ');
+    showFeedback(`❌ ORDER DITOLAK! Terdeteksi ${missingSkus.size} SKU belum terdaftar di Master: [${unregList}]. Harap upload SKU Master terlebih dahulu di Section 1!`, 'error');
+    if (btnSaveToDb) btnSaveToDb.style.display = 'none'; // Lock Save Button
+  } else {
+    showFeedback(`✅ ${parsedOrderData.length} item Order valid & seluruh SKU terdaftar di Master. Siap disimpan!`, 'success');
+    if (btnSaveToDb) btnSaveToDb.style.display = 'inline-block'; // Unlock Save Button
+  }
 }
 
 async function saveToSupabase() {
-  if (parsedData.length === 0 || !supabaseClient) return;
+  if (parsedOrderData.length === 0 || !supabaseClient) return;
+
+  // Double Guard Check
+  const unregItems = parsedOrderData.filter(item => !skuMasterMap.has(item.lot_code));
+  if (unregItems.length > 0) {
+    const unregList = [...new Set(unregItems.map(i => i.lot_code))].join(', ');
+    showFeedback(`❌ GAGAL SIMPAN! SKU berikut belum terdaftar di SKU Master: [${unregList}]`, 'error');
+    return;
+  }
 
   const btnSaveToDb = document.getElementById('btnSaveToDb');
   btnSaveToDb.disabled = true;
   btnSaveToDb.innerText = '⏳ Saving...';
 
   try {
-    // 1. Group Headers PO
     const uniqueOrdersMap = new Map();
-    parsedData.forEach(item => {
+    parsedOrderData.forEach(item => {
       if (!uniqueOrdersMap.has(item.po_number)) {
         uniqueOrdersMap.set(item.po_number, {
           po_number: item.po_number,
+          wh_id: item.wh_id,
           blend_code: item.blend_code,
           arrival_date: item.arrival_date,
           arrival_time: item.arrival_time
@@ -301,21 +507,21 @@ async function saveToSupabase() {
     const ordersHeaderList = Array.from(uniqueOrdersMap.values());
     const poNumberList = ordersHeaderList.map(o => o.po_number);
 
-    // 2. Upsert Orders Header
+    // 1. Upsert Header Orders
     const { error: errOrders } = await supabaseClient
       .from('orders')
       .upsert(ordersHeaderList, { onConflict: 'po_number' });
     if (errOrders) throw errOrders;
 
-    // 3. REVISION STRATEGY: Hapus order_items lama untuk PO ini agar revisi bersih
+    // 2. Delete Items Lama untuk PO ini (Revision Strategy)
     const { error: errDelItems } = await supabaseClient
       .from('order_items')
       .delete()
       .in('po_number', poNumberList);
     if (errDelItems) throw errDelItems;
 
-    // 4. Insert Order Items Baru
-    const orderItemsList = parsedData.map(item => ({
+    // 3. Insert Items Baru
+    const orderItemsList = parsedOrderData.map(item => ({
       po_number: item.po_number,
       blend_code: item.blend_code,
       lot_code: item.lot_code,
@@ -330,19 +536,18 @@ async function saveToSupabase() {
 
     if (errItems) throw errItems;
 
-    showFeedback('🎉 DATA ORDER / REVISI BERHASIL DISIMPAN KE SUPABASE!', 'success');
-    parsedData = [];
+    showFeedback('🎉 ORDER BERHASIL DISIMPAN KE DATABASE!', 'success');
+    parsedOrderData = [];
     document.getElementById('previewArea').style.display = 'none';
     btnSaveToDb.style.display = 'none';
-    document.getElementById('fileInput').value = '';
 
     await loadMasterData();
     await populateExportPODropdown();
   } catch (err) {
-    showFeedback(`❌ Gagal menyimpan ke DB: ${err.message}`, 'error');
+    showFeedback(`❌ Gagal menyimpan Order: ${err.message}`, 'error');
   } finally {
     btnSaveToDb.disabled = false;
-    btnSaveToDb.innerText = '💾 Simpan ke Database';
+    btnSaveToDb.innerText = '💾 Simpan Order ke Database';
   }
 }
 
@@ -350,7 +555,7 @@ async function loadMasterData() {
   const masterPoTbody = document.getElementById('masterPoTbody');
   if (!masterPoTbody || !supabaseClient) return;
 
-  masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>';
+  masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading data master...</td></tr>';
   try {
     const { data: orders, error: errOrders } = await supabaseClient.from('orders').select('*').order('arrival_date', { ascending: false });
     if (errOrders) throw errOrders;
@@ -359,7 +564,7 @@ async function loadMasterData() {
     if (errItems) throw errItems;
 
     if (!orders || orders.length === 0) {
-      masterPoTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Belum ada PO tersimpan.</td></tr>';
+      masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Belum ada PO tersimpan.</td></tr>';
       return;
     }
 
@@ -368,6 +573,7 @@ async function loadMasterData() {
       const lotCount = items.filter(i => i.po_number === po.po_number).length;
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td><strong>${po.wh_id || 'WH01'}</strong></td>
         <td><strong>${po.po_number}</strong></td>
         <td>${po.blend_code || '-'}</td>
         <td>${po.arrival_date || '-'}</td>
@@ -380,29 +586,27 @@ async function loadMasterData() {
       masterPoTbody.appendChild(tr);
     });
   } catch (err) {
-    masterPoTbody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`;
+    masterPoTbody.innerHTML = `<tr><td colspan="7" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`;
   }
 }
 
-// Populate Export Dropdown PO List
 async function populateExportPODropdown() {
   const exportPoSelect = document.getElementById('exportPoSelect');
   if (!exportPoSelect || !supabaseClient) return;
 
-  const { data: orders } = await supabaseClient.from('orders').select('po_number, blend_code, arrival_date').order('arrival_date', { ascending: false });
+  const { data: orders } = await supabaseClient.from('orders').select('po_number, wh_id, blend_code').order('created_at', { ascending: false });
   exportPoSelect.innerHTML = '<option value="ALL">-- SEMUA PO / DATA --</option>';
 
   if (orders) {
     orders.forEach(po => {
       const opt = document.createElement('option');
       opt.value = po.po_number;
-      opt.innerText = `PO: ${po.po_number} (${po.blend_code}) - ${po.arrival_date}`;
+      opt.innerText = `[${po.wh_id || 'WH01'}] PO: ${po.po_number}`;
       exportPoSelect.appendChild(opt);
     });
   }
 }
 
-// FEATURE: EXPORT SCAN LOGS TO EXCEL
 async function exportScanLogsToExcel() {
   if (!supabaseClient) return;
 
@@ -425,18 +629,15 @@ async function exportScanLogsToExcel() {
       return;
     }
 
-    // Format Data untuk Excel Sheet
     const formattedData = logs.map((item, index) => ({
       'No': index + 1,
       'PO Number': item.po_number,
       'Serial Number': item.serial_number,
       'LOT Code': item.lot_code,
       'Case Number': item.case_number || '-',
-      'PMI Run No': item.pmi_run_no || '-',
       'Gross Weight (kg)': item.gross_weight_kg,
       'Net Weight (kg)': item.net_weight_kg,
       'Moisture (%)': item.moisture,
-      'Grade Code': item.grade_code || '-',
       'Is Bypassed': item.is_bypassed ? 'YES' : 'NO',
       'Scanned By': item.scanned_by || 'Operator',
       'Scanned Timestamp': new Date(item.scanned_at).toLocaleString('id-ID')
@@ -476,9 +677,9 @@ window.deletePO = async function(poNumber) {
 // 3. SCANNER PAGE MODULE (index.html)
 // ==========================================
 function initScannerPage() {
+  const whSelect = document.getElementById('whSelect');
   const weekSelect = document.getElementById('weekSelect');
   const dateSelect = document.getElementById('dateSelect');
-  const ritSelect = document.getElementById('ritSelect');
   const poSelect = document.getElementById('poSelect');
   const manualPoInput = document.getElementById('manualPoInput');
   const btnToggleManual = document.getElementById('btnToggleManual');
@@ -517,38 +718,76 @@ function initScannerPage() {
 
       if (error) throw error;
       allOrdersData = data || [];
-      populateWeekDropdown();
+      populateWHIDDropdown();
     } catch (err) {
       showFeedback(`Gagal load PO: ${err.message}`, 'error');
     }
   }
 
-  function populateWeekDropdown() {
-    const weeks = [...new Set(allOrdersData.map(item => getISOWeek(item.arrival_date)))];
+  // STEP 1: POPULATE WHID
+  function populateWHIDDropdown() {
+    const whList = [...new Set(allOrdersData.map(item => item.wh_id || 'WH01'))];
+    whSelect.innerHTML = '<option value="">-- Pilih WHID --</option>';
+    whList.forEach(w => {
+      const opt = document.createElement('option');
+      opt.value = w;
+      opt.innerText = `Warehouse: ${w}`;
+      whSelect.appendChild(opt);
+    });
+  }
+
+  // EVENT WHID CHANGED -> FILTER WEEKS & POS
+  whSelect.addEventListener('change', () => {
+    activeWHID = whSelect.value;
     weekSelect.innerHTML = '<option value="">- Week -</option>';
+    dateSelect.innerHTML = '<option value="">- Date -</option>';
+    poSelect.innerHTML = '<option value="">-- Pilih PO --</option>';
+
+    weekSelect.disabled = !activeWHID;
+    dateSelect.disabled = true;
+    poSelect.disabled = !activeWHID;
+
+    if (!activeWHID) return;
+
+    // Populate Weeks for selected WHID
+    const whFilteredOrders = allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID);
+    const weeks = [...new Set(whFilteredOrders.map(item => getISOWeek(item.arrival_date)))];
+    
     weeks.forEach(w => {
       const opt = document.createElement('option');
       opt.value = w;
       opt.innerText = w;
       weekSelect.appendChild(opt);
     });
+
+    // Directly populate POs for this WHID
+    populatePOsForWH(whFilteredOrders);
+  });
+
+  function populatePOsForWH(ordersList) {
+    poSelect.innerHTML = '<option value="">-- Pilih Target PO --</option>';
+    ordersList.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.po_number;
+      opt.innerText = `PO: ${po.po_number} (${po.blend_code || '-'})`;
+      poSelect.appendChild(opt);
+    });
   }
 
   weekSelect.addEventListener('change', () => {
     const selectedWeek = weekSelect.value;
     dateSelect.innerHTML = '<option value="">- Date -</option>';
-    ritSelect.innerHTML = '<option value="">- Rit -</option>';
-    poSelect.innerHTML = '<option value="">-- Pilih Rit Dahulu --</option>';
-
     dateSelect.disabled = !selectedWeek;
-    ritSelect.disabled = true;
-    poSelect.disabled = true;
 
-    if (!selectedWeek) return;
+    if (!selectedWeek) {
+      const whFilteredOrders = allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID);
+      populatePOsForWH(whFilteredOrders);
+      return;
+    }
 
     const filteredDates = [...new Set(
       allOrdersData
-        .filter(item => getISOWeek(item.arrival_date) === selectedWeek)
+        .filter(item => (item.wh_id || 'WH01') === activeWHID && getISOWeek(item.arrival_date) === selectedWeek)
         .map(item => item.arrival_date)
     )];
 
@@ -562,46 +801,12 @@ function initScannerPage() {
 
   dateSelect.addEventListener('change', () => {
     const selectedDate = dateSelect.value;
-    ritSelect.innerHTML = '<option value="">- Rit -</option>';
-    poSelect.innerHTML = '<option value="">-- Pilih Rit Dahulu --</option>';
-
-    ritSelect.disabled = !selectedDate;
-    poSelect.disabled = true;
-
     if (!selectedDate) return;
 
-    const filteredRits = [...new Set(
-      allOrdersData
-        .filter(item => item.arrival_date === selectedDate)
-        .map(item => item.arrival_time)
-    )];
-
-    filteredRits.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.innerText = `Rit: ${r.substring(0, 5)}`;
-      ritSelect.appendChild(opt);
-    });
-  });
-
-  ritSelect.addEventListener('change', () => {
-    const selectedDate = dateSelect.value;
-    const selectedRit = ritSelect.value;
-    poSelect.innerHTML = '<option value="">-- Pilih Target PO --</option>';
-
-    poSelect.disabled = !selectedRit;
-    if (!selectedRit) return;
-
     const matchedPOs = allOrdersData.filter(
-      item => item.arrival_date === selectedDate && item.arrival_time === selectedRit
+      item => (item.wh_id || 'WH01') === activeWHID && item.arrival_date === selectedDate
     );
-
-    matchedPOs.forEach(po => {
-      const opt = document.createElement('option');
-      opt.value = po.po_number;
-      opt.innerText = `PO: ${po.po_number} (${po.blend_code})`;
-      poSelect.appendChild(opt);
-    });
+    populatePOsForWH(matchedPOs);
   });
 
   poSelect.addEventListener('change', async (e) => {
@@ -664,6 +869,8 @@ function initScannerPage() {
 
       if (errLogs) throw errLogs;
 
+      const poHeader = allOrdersData.find(o => o.po_number === poNumber);
+
       poItems = items.map(item => {
         const lotLogs = logs.filter(l => l.lot_code === item.lot_code);
         const totalWeightScanned = lotLogs.reduce((sum, l) => sum + Number(l.net_weight_kg), 0);
@@ -672,7 +879,7 @@ function initScannerPage() {
         return { ...item, scanned_ct: scannedCt };
       });
 
-      renderPOSummary(poItems[0]);
+      renderPOSummary(poHeader, poItems[0]);
       renderLotTable();
     } catch (err) {
       showFeedback(`Error fetching PO details: ${err.message}`, 'error');
@@ -819,6 +1026,7 @@ function initScannerPage() {
 
     const waMessage = 
 `${headerStatus}
+🏢 *WHID:* ${activeWHID || 'WH01'}
 📌 *PO NUMBER:* ${activePO}
 📦 *BLEND:* ${sampleItem.blend_code || '-'}
 ⏰ *RIT/TIME:* ${sampleItem.arrival_time ? sampleItem.arrival_time.substring(0, 5) : '-'}
@@ -902,11 +1110,12 @@ _Reported via RF Scanner App_`;
     }
   };
 
-  function renderPOSummary(sampleItem) {
+  function renderPOSummary(poHeader, sampleItem) {
     if(!sampleItem) return;
     document.getElementById('poSummary').style.display = 'block';
+    document.getElementById('lblWhId').innerText = (poHeader && poHeader.wh_id) ? poHeader.wh_id : 'WH01';
     document.getElementById('lblBlend').innerText = sampleItem.blend_code || '-';
-    document.getElementById('lblTime').innerText = sampleItem.arrival_time ? sampleItem.arrival_time.substring(0, 5) : '-';
+    document.getElementById('lblTime').innerText = (poHeader && poHeader.arrival_time) ? poHeader.arrival_time.substring(0, 5) : '-';
 
     const totalTargetCT = poItems.reduce((s, i) => s + Number(i.qty_usage_ct), 0);
     const totalScannedCT = poItems.reduce((s, i) => s + Number(i.scanned_ct), 0);
@@ -985,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('barcodeInput')) {
     initScannerPage();
   }
-  if (document.getElementById('dropzone')) {
+  if (document.getElementById('dropzoneOrder') || document.getElementById('dropzoneSku')) {
     initAdminPage();
   }
 });
