@@ -1187,6 +1187,8 @@ function initScannerPage() {
   btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
 
   btnSubmitDispatch.addEventListener('click', async () => {
+    const now = new Date();
+    const formattedTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const ritNum = document.getElementById('dispRit').value.trim();
     const vehicle = document.getElementById('dispVehicle').value.trim();
     const photoBefore = document.getElementById('photoTrapBefore').files[0];
@@ -1212,7 +1214,7 @@ function initScannerPage() {
           wh_id: activeWHID || 'WH01',
           rit_number: ritNum,
           vehicle_number: vehicle,
-          eta_time: new Date().toLocaleTimeString('id-ID', { hour12: false, hour: "numeric", minute: "numeric" }),
+          eta_time: formattedTime, // <--- UBAH BAGIAN INI
           photo_mobile_trap_before_url: urlBefore,
           photo_mobile_trap_after_url: urlAfter
         }])
