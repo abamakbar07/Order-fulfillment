@@ -102,16 +102,20 @@
         <span>3. Export Reports & PDF Evidence Generator</span>
       </div>
       
+      <!-- Export Excel Log (Berdasarkan PO) -->
       <div class="form-row" style="align-items: flex-end; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #cbd5e1;">
         <div class="form-group" style="flex: 2;">
           <label>EXPORT EXCEL (DATA SCAN MASUK):</label>
+          <span id="btnToggleManualAdmin" class="toggle-manual">Input Manual PO?</span>
           <select id="exportPoSelect"><option value="ALL">-- SEMUA PO / DATA --</option></select>
+          <input type="text" id="manualPoInputAdmin" placeholder="Ketik Nomor PO Manual / Scan Barcode..." style="display: none; margin-top: 4px;" />
         </div>
         <div class="form-group" style="flex: 1;">
           <button id="btnExportLogs" class="btn btn-primary" style="width: 100%;">📥 Download Excel</button>
         </div>
       </div>
 
+      <!-- Export PDF Outbound (Berdasarkan Sesi Dispatch / Truk) -->
       <div class="form-row" style="align-items: flex-end;">
         <div class="form-group" style="flex: 2;">
           <label style="color: #c53030; font-weight: bold;">CETAK PDF OUTBOUND (BERDASARKAN RIT TRUK):</label>

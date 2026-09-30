@@ -166,6 +166,28 @@ function initAdminPage() {
     generateOutboundPdfReport(exportRitSelect.value);
   });
 
+  // Toggle Manual Input PO Admin
+  const btnToggleManualAdmin = document.getElementById('btnToggleManualAdmin');
+  const exportPoSelect = document.getElementById('exportPoSelect');
+  const manualPoInputAdmin = document.getElementById('manualPoInputAdmin');
+  let isManualAdminMode = false;
+
+  if (btnToggleManualAdmin) {
+    btnToggleManualAdmin.addEventListener('click', () => {
+      isManualAdminMode = !isManualAdminMode;
+      if (isManualAdminMode) {
+        exportPoSelect.style.display = 'none'; 
+        manualPoInputAdmin.style.display = 'block';
+        btnToggleManualAdmin.innerText = 'Gunakan Dropdown'; 
+        manualPoInputAdmin.focus();
+      } else {
+        exportPoSelect.style.display = 'block'; 
+        manualPoInputAdmin.style.display = 'none';
+        btnToggleManualAdmin.innerText = 'Input Manual PO?';
+      }
+    });
+  }
+
   loadMasterData();
   populateExportPODropdown();
   populatePdfRitDropdown();
@@ -464,8 +486,20 @@ async function populateExportPODropdown() {
 
 async function exportScanLogsToExcel() {
   if (!supabaseClient) return;
-  const exportPoSelect = document.getElementById('exportPoSelect');
-  const selectedPO = exportPoSelect ? exportPoSelect.value : 'ALL';
+  
+  const manualInput = document.getElementById('manualPoInputAdmin');
+  const isManual = manualInput && manualInput.style.display === 'block';
+  let selectedPO = 'ALL';
+
+  // Cek apakah Admin menggunakan Input Manual atau Dropdown
+  if (isManual) {
+    selectedPO = manualInput.value.trim();
+    if (!selectedPO) return showFeedback('⚠️ Ketik atau Scan Nomor PO terlebih dahulu!', 'warning');
+  } else {
+    const exportPoSelect = document.getElementById('exportPoSelect');
+    selectedPO = exportPoSelect ? exportPoSelect.value : 'ALL';
+  }
+
   showFeedback('⏳ Mengambil data scan log...', 'warning');
 
   try {
@@ -525,7 +559,7 @@ async function generateOutboundPdfReport(dispatchId) {
           <td>${log.total_box || 0}</td>
           <td>${log.serrico_trap_qty || 0}</td>
           <td style="background-color: #fef08a; font-weight:bold;">PASSED</td>
-          <td style="background-color: #fef08a;">COLD STORAGE</td>
+          <td style="background-color: #fef08a;">-</td>
           <td>${po.wh_id || 'WH01'}</td>
           <td>${log.inspection_date || ''}<br>${log.inspection_time || ''}</td>
         </tr>`;
@@ -750,7 +784,27 @@ function initScannerPage() {
     manualPoInput.addEventListener('keypress', async (e) => {
       if (e.key === 'Enter') {
         const val = manualPoInput.value.trim();
-        if (val) { activePO = val; await handlePOSelected(activePO); barcodeInput.focus(); }
+        if (!val) return;
+        
+        // 1. AUTO-DETECT RIT, TANGGAL & WHID DARI MASTER DATA
+        const matchedPO = allOrdersData.find(o => o.po_number === val);
+        
+        if (matchedPO) {
+          // Set variabel global otomatis
+          activeWHID = matchedPO.wh_id || 'WH01';
+          activeDate = matchedPO.arrival_date;
+          activeRIT = matchedPO.arrival_time;
+          activePO = matchedPO.po_number;
+          
+          showFeedback(`🔍 PO Ditemukan! (RIT: ${activeRIT} | Tgl: ${activeDate})`, 'success');
+          
+          // 2. Load PO Details
+          await handlePOSelected(activePO);
+          barcodeInput.focus();
+        } else {
+          triggerFeedback('error');
+          showFeedback(`❌ PO [${val}] tidak ditemukan di Master Data! Pastikan Admin sudah import Order.`, 'error');
+        }
       }
     });
   }
