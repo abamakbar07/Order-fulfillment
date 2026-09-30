@@ -1,12 +1,9 @@
-<!-- ==================================================================== -->
-<!-- 2. admin.html -->
-<!-- ==================================================================== -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - HMS Order & SKU Management</title>
+  <title>Admin - VCP-OP Order & SKU Management</title>
   
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -18,7 +15,7 @@
   <div class="container">
     <div class="card" style="padding: 10px 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: bold; color: #2c5282;">⚙️ HMS Admin Portal</span>
+        <span style="font-weight: bold; color: #2c5282;">⚙️ VCP-OP Admin Portal</span>
         <a href="index.html" class="nav-link">📱 Buka RF Scanner App &rarr;</a>
       </div>
     </div>
@@ -35,12 +32,11 @@
         </div>
       </div>
       <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
-        Upload file Excel/CSV berisi daftar SKU/Lot dan Standar Net Weight (kg) sebelum mengunggah Order.
+        Upload file Excel/CSV berisi daftar SKU/Lot dan Standar Net Weight (kg).
       </p>
 
       <div class="dropzone" id="dropzoneSku">
         <p>🏷️ Drag & Drop / Klik untuk Upload File SKU Master</p>
-        <span>Format support: .xlsx, .xls, .csv (Kolom: Lot/SKU, Net Weight)</span>
         <input type="file" id="fileInputSku" accept=".xlsx, .xls, .csv" style="display: none;" />
       </div>
 
@@ -51,10 +47,7 @@
         <div class="table-container">
           <table>
             <thead>
-              <tr>
-                <th>SKU / Lot Code</th>
-                <th>Standard Net Weight (kg)</th>
-              </tr>
+              <tr><th>SKU / Lot Code</th><th>Standard Net Weight (kg)</th></tr>
             </thead>
             <tbody id="previewSkuTbody"></tbody>
           </table>
@@ -72,12 +65,11 @@
         </div>
       </div>
       <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
-        Wajib: <strong>PO Number, SKU / Lot Code, Qty (CT)</strong>. Opsional: WHID, Date, Time, Blend.
+        Wajib: <strong>PO Number, SKU / Lot Code, Qty (CT)</strong>. Opsional: Arrival Time (Jam RIT).
       </p>
 
       <div class="dropzone" id="dropzoneOrder">
         <p>📁 Drag & Drop / Klik untuk Upload File Order</p>
-        <span>Format support: .xlsx, .xls, .csv</span>
         <input type="file" id="fileInputOrder" accept=".xlsx, .xls, .csv" style="display: none;" />
       </div>
 
@@ -94,7 +86,7 @@
                 <th>SKU / Lot Code</th>
                 <th>Qty Usage (CT)</th>
                 <th>Arrival Date</th>
-                <th>Arrival Time</th>
+                <th>Arrival Time (RIT)</th>
                 <th>Blend</th>
               </tr>
             </thead>
@@ -110,7 +102,6 @@
         <span>3. Export Reports & PDF Evidence Generator</span>
       </div>
       
-      <!-- Export Excel Log (Berdasarkan PO & RIT Inbound) -->
       <div class="form-row" style="align-items: flex-end; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #cbd5e1;">
         <div class="form-group" style="flex: 2;">
           <label>EXPORT EXCEL (DATA SCAN MASUK):</label>
@@ -121,7 +112,6 @@
         </div>
       </div>
 
-      <!-- Export PDF Outbound (Berdasarkan Sesi Dispatch / Truk) -->
       <div class="form-row" style="align-items: flex-end;">
         <div class="form-group" style="flex: 2;">
           <label style="color: #c53030; font-weight: bold;">CETAK PDF OUTBOUND (BERDASARKAN RIT TRUK):</label>
@@ -139,7 +129,6 @@
         <span>4. Master Data Order Terdaftar</span>
         <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
       </div>
-
       <div class="table-container">
         <table>
           <thead>
@@ -148,7 +137,7 @@
               <th>PO Number</th>
               <th>Blend</th>
               <th>Arrival Date</th>
-              <th>Arrival Time</th>
+              <th>Arrival Time (RIT)</th>
               <th>Total Lot</th>
               <th>Aksi</th>
             </tr>
@@ -159,7 +148,6 @@
         </table>
       </div>
     </div>
-
   </div>
 
   <script src="script.js"></script>

@@ -1,12 +1,9 @@
-<!-- ==================================================================== -->
-<!-- 3. index.html -->
-<!-- ==================================================================== -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HMS Warehouse RF Scanner</title>
+  <title>VCP-OP Warehouse RF Scanner</title>
   
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -25,7 +22,6 @@
       </div>
     </div>
 
-    <!-- NAMA CHECKER -->
     <div class="form-group" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
       <label for="checkerNameInput">👤 NAMA CHECKER (PIC):</label>
       <input type="text" id="checkerNameInput" placeholder="Ketik nama Anda di sini..." style="border: 2px solid #3182ce; font-weight: bold;" />
@@ -47,7 +43,6 @@
       </div>
     </div>
     
-    <!-- FILTER BARU: ARRIVAL TIME / RITASE -->
     <div class="form-group" style="margin-top: 4px;">
       <label for="ritSelect">4. Arrival Time (RIT Kedatangan):</label>
       <select id="ritSelect" disabled><option value="">- Pilih Jam / RIT -</option></select>
@@ -55,10 +50,11 @@
     
     <div class="form-group" style="margin-top: 4px;">
       <label for="poSelect">5. Target PO:</label>
+      <span id="btnToggleManual" class="toggle-manual">Input Manual PO?</span>
       <select id="poSelect" disabled><option value="">-- Pilih Arrival Time Dahulu --</option></select>
+      <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
     </div>
     
-    <!-- PO SUMMARY (Diperbarui) -->
     <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
       <div><strong>RIT:</strong> <span id="lblRit">-</span> | <strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Tgl:</strong> <span id="lblDate">-</span></div>
       <div style="margin-top: 4px;">
@@ -67,13 +63,11 @@
           <div id="progressBar" class="progress-bar-fill"></div>
         </div>
       </div>
-      <!-- Tombol Aksi -->
       <div style="margin-top: 10px; display: flex; gap: 6px;">
         <button id="btnOpenMonitoring" class="btn btn-primary btn-sm" style="flex: 1;">📸 Monitoring Staging</button>
         <button id="btnOpenDispatch" class="btn btn-success btn-sm" style="flex: 1;">🚚 Proses Loading</button>
       </div>
     </div>
-  </div>
   </div>
 
   <div class="scan-container">
@@ -124,12 +118,7 @@
       <div class="modal-body">
         <table>
           <thead>
-            <tr>
-              <th>LOT</th>
-              <th>SN (Last 8)</th>
-              <th>KG</th>
-              <th>Aksi</th>
-            </tr>
+            <tr><th>LOT</th><th>SN (Last 8)</th><th>KG</th><th>Aksi</th></tr>
           </thead>
           <tbody id="logTableBody">
             <tr><td colspan="4" style="text-align:center;">Loading logs...</td></tr>
@@ -151,28 +140,13 @@
           <input type="text" id="monKainMori" placeholder="Contoh: KM-0812" />
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Total Box:</label>
-            <input type="number" id="monTotalBox" readonly style="background: #edf2f7;" />
-          </div>
-          <div class="form-group">
-            <label>Serrico Qty:</label>
-            <input type="number" id="monSerricoQty" readonly style="background: #edf2f7;" />
-          </div>
+          <div class="form-group"><label>Total Box:</label><input type="number" id="monTotalBox" readonly style="background: #edf2f7;" /></div>
+          <div class="form-group"><label>Serrico Qty:</label><input type="number" id="monSerricoQty" readonly style="background: #edf2f7;" /></div>
         </div>
         <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
-        <div class="form-group">
-          <label>📷 Foto Material + Kain Mori:</label>
-          <input type="file" id="photoMori" accept="image/*" capture="environment" />
-        </div>
-        <div class="form-group">
-          <label>📷 Foto Serrico (Luar):</label>
-          <input type="file" id="photoSerricoOut" accept="image/*" capture="environment" />
-        </div>
-        <div class="form-group">
-          <label>📷 Foto Serrico (Dalam):</label>
-          <input type="file" id="photoSerricoIn" accept="image/*" capture="environment" />
-        </div>
+        <div class="form-group"><label>📷 Foto Material + Kain Mori:</label><input type="file" id="photoMori" accept="image/*" capture="environment" /></div>
+        <div class="form-group"><label>📷 Foto Serrico (Luar):</label><input type="file" id="photoSerricoOut" accept="image/*" capture="environment" /></div>
+        <div class="form-group"><label>📷 Foto Serrico (Dalam):</label><input type="file" id="photoSerricoIn" accept="image/*" capture="environment" /></div>
         <div class="form-group" style="margin-top: 15px;">
           <button id="btnSubmitMonitoring" class="btn btn-primary" style="width: 100%;">💾 Simpan Evidence Monitoring</button>
         </div>
@@ -188,39 +162,18 @@
       </div>
       <div class="modal-body">
         <div class="form-row">
-          <div class="form-group">
-            <label>No. RIT:</label>
-            <input type="text" id="dispRit" placeholder="Contoh: RIT 1" />
-          </div>
-          <div class="form-group">
-            <label>Plat Kendaraan:</label>
-            <input type="text" id="dispVehicle" placeholder="Contoh: B 1234 CD" />
-          </div>
+          <div class="form-group"><label>No. RIT:</label><input type="text" id="dispRit" placeholder="Contoh: RIT 1" /></div>
+          <div class="form-group"><label>Plat Kendaraan:</label><input type="text" id="dispVehicle" placeholder="Contoh: B 1234 CD" /></div>
         </div>
         <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
-        
         <div class="form-row">
-          <div class="form-group">
-            <label style="font-size: 11px;">📷 Trap Luar (BEFORE):</label>
-            <input type="file" id="photoTrapOutBefore" accept="image/*" capture="environment" />
-          </div>
-          <div class="form-group">
-            <label style="font-size: 11px;">📷 Trap Dalam (BEFORE):</label>
-            <input type="file" id="photoTrapInBefore" accept="image/*" capture="environment" />
-          </div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Luar (BEFORE):</label><input type="file" id="photoTrapOutBefore" accept="image/*" capture="environment" /></div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Dalam (BEFORE):</label><input type="file" id="photoTrapInBefore" accept="image/*" capture="environment" /></div>
         </div>
-        
         <div class="form-row">
-          <div class="form-group">
-            <label style="font-size: 11px;">📷 Trap Luar (AFTER):</label>
-            <input type="file" id="photoTrapOutAfter" accept="image/*" capture="environment" />
-          </div>
-          <div class="form-group">
-            <label style="font-size: 11px;">📷 Trap Dalam (AFTER):</label>
-            <input type="file" id="photoTrapInAfter" accept="image/*" capture="environment" />
-          </div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Luar (AFTER):</label><input type="file" id="photoTrapOutAfter" accept="image/*" capture="environment" /></div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Dalam (AFTER):</label><input type="file" id="photoTrapInAfter" accept="image/*" capture="environment" /></div>
         </div>
-
         <div class="form-group" style="margin-top: 15px;">
           <button id="btnSubmitDispatch" class="btn btn-success" style="width: 100%;">🚀 Selesaikan Loading & Generate Link</button>
         </div>
