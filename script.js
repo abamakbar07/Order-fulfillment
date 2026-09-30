@@ -658,6 +658,15 @@ function initScannerPage() {
   fetchAllOrders();
   keepInputFocused();
 
+  // Keyboard virtual disembunyikan default (scanner hardware); tombol ini untuk ketik manual
+  const btnKeyboard = document.getElementById('btnKeyboard');
+  if (btnKeyboard) btnKeyboard.addEventListener('click', () => {
+    const hidden = barcodeInput.getAttribute('inputmode') === 'none';
+    barcodeInput.setAttribute('inputmode', hidden ? 'text' : 'none');
+    btnKeyboard.classList.toggle('is-on', hidden);
+    barcodeInput.blur(); barcodeInput.focus();
+  });
+
   function keepInputFocused() {
     document.body.addEventListener('click', (e) => {
       if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') barcodeInput.focus();
@@ -985,7 +994,7 @@ _Reported via VCP-OP RF Scanner App_`;
     
     document.getElementById('lblProgressText').innerText = `${totalScannedCT.toFixed(1)} / ${totalTargetCT} CT (${pct}%)`;
     document.getElementById('progressBar').style.width = `${pct}%`;
-    document.getElementById('progressBar').style.backgroundColor = pct >= 100 ? '#38a169' : '#3182ce';
+    document.getElementById('progressBar').classList.toggle('is-complete', pct >= 100);
   }
 
   function renderLotTable() {

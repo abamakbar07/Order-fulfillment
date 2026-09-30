@@ -2,7 +2,8 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1b1d">
   <title>VCP-OP Warehouse RF Scanner</title>
   
   <link rel="stylesheet" href="style.css">
@@ -12,9 +13,17 @@
 
   <div id="screenFlashOverlay" class="flash-overlay"></div>
 
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo-chip"><img src="assets/logo-assa.png" alt="ASSA"></span>
+      <div class="brand-text"><strong>RF Scanner</strong><small>Outbound VCP-OP</small></div>
+    </div>
+    <span class="logo-chip logo-chip--cust"><img src="assets/logo-hms.png" alt="HM Sampoerna"></span>
+  </header>
+
   <div class="card">
     <div class="header-title">
-      <span>Warehouse RF Scanner</span>
+      <span>Pilih PO</span>
       <div>
         <button id="btnOpenLogs" class="btn btn-info btn-sm" style="display:none;">📋 Log</button>
         <button id="btnCopyWA" class="btn btn-whatsapp btn-sm" style="display:none;">📱 Copy WA</button>
@@ -71,8 +80,11 @@
   </div>
 
   <div class="scan-container">
-    <label for="barcodeInput" style="color: #2b6cb0;">TEMBAK BARCODE (31 CHARS):</label>
-    <input type="text" id="barcodeInput" class="scan-input" autofocus autocomplete="off" placeholder="Scan Serial Number..." />
+    <div class="scan-head">
+      <label for="barcodeInput">Scan barcode (31 karakter)</label>
+      <button type="button" id="btnKeyboard" class="btn-link">⌨ Keyboard</button>
+    </div>
+    <input type="text" id="barcodeInput" class="scan-input" autofocus autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="none" placeholder="Siap scan..." />
   </div>
 
   <div id="feedbackBanner" class="feedback-banner"></div>
