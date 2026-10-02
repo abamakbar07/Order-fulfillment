@@ -108,11 +108,21 @@
       </div>
       
       <!-- Export Excel Log (Berdasarkan PO) -->
-      <div class="form-row" style="align-items: flex-end; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #cbd5e1;">
-        <div class="form-group" style="flex: 2;">
-          <label>EXPORT EXCEL (DATA SCAN MASUK):</label>
+      <div class="export-row" style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px dashed #cbd5e1;">
+        <div class="form-group">
+          <label>Export Excel (data scan masuk)</label>
           <span id="btnToggleManualAdmin" class="toggle-manual">Input Manual PO?</span>
-          <select id="exportPoSelect"><option value="ALL">-- SEMUA PO / DATA --</option></select>
+          <div id="exportPoSelect" class="po-picker">
+            <div class="form-row">
+              <div class="form-group"><label for="exportDateSelect">Tanggal</label><select id="exportDateSelect"><option value="">Semua tanggal</option></select></div>
+              <div class="form-group"><label for="exportRitFilter">RIT / jam</label><select id="exportRitFilter"><option value="">Semua RIT</option></select></div>
+            </div>
+            <div class="po-picker-head">
+              <label class="check-row"><input type="checkbox" id="exportPoAll"> Pilih semua yang tampil</label>
+              <strong id="exportPoCount">0 dipilih</strong>
+            </div>
+            <div id="exportPoList" class="po-list"><div class="po-empty">Memuat daftar PO...</div></div>
+          </div>
           <input type="text" id="manualPoInputAdmin" placeholder="Ketik Nomor PO Manual / Scan Barcode..." style="display: none; margin-top: 4px;" />
         </div>
         <div class="form-group" style="flex: 1;">

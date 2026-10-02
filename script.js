@@ -188,6 +188,7 @@ function initAdminPage() {
     });
   }
 
+  initExportPicker();
   loadMasterData();
   populateExportPODropdown();
   populatePdfRitDropdown();
@@ -468,20 +469,76 @@ window.deletePO = async function(poNumber, arrivalTime) {
   } catch (err) { showFeedback(`❌ Delete error: ${err.message}`, 'error'); }
 };
 
+// ---------- Export picker: pilih banyak PO, filter per tanggal / RIT ----------
+let exportOrders = [];
+let exportSelected = new Set();
+const exportKey = o => `${o.po_number}___${o.arrival_time}`;
+
+function exportVisibleOrders() {
+  const d = document.getElementById('exportDateSelect').value;
+  const r = document.getElementById('exportRitFilter').value;
+  return exportOrders.filter(o => (!d || o.arrival_date === d) && (!r || o.arrival_time === r));
+}
+
+function refreshExportRitOptions() {
+  const d = document.getElementById('exportDateSelect').value;
+  const times = [...new Set(exportOrders.filter(o => !d || o.arrival_date === d).map(o => o.arrival_time))].sort();
+  document.getElementById('exportRitFilter').innerHTML =
+    '<option value="">Semua RIT</option>' + times.map(t => `<option value="${t}">${t}</option>`).join('');
+}
+
+function updateExportCount(visible = exportVisibleOrders()) {
+  document.getElementById('exportPoAll').checked = visible.length > 0 && visible.every(o => exportSelected.has(exportKey(o)));
+  document.getElementById('exportPoCount').innerText = `${exportSelected.size} dari ${exportOrders.length} dipilih`;
+}
+
+function renderExportPoList() {
+  const list = document.getElementById('exportPoList');
+  const visible = exportVisibleOrders();
+  list.innerHTML = visible.length
+    ? visible.map(o => `<label class="po-item"><input type="checkbox" data-key="${exportKey(o)}" ${exportSelected.has(exportKey(o)) ? 'checked' : ''}><span class="po-main">${o.po_number}</span><span class="po-meta">${o.arrival_date} &middot; ${o.arrival_time} &middot; ${o.blend_code || '-'}</span></label>`).join('')
+    : '<div class="po-empty">Tidak ada PO untuk filter ini.</div>';
+  updateExportCount(visible);
+}
+
+// Saat filter tanggal/RIT berubah: otomatis centang semua PO yang tampil
+function selectVisibleExport() {
+  exportSelected = new Set(exportVisibleOrders().map(exportKey));
+  renderExportPoList();
+}
+
 async function populateExportPODropdown() {
-  const exportPoSelect = document.getElementById('exportPoSelect');
-  if (!exportPoSelect || !supabaseClient) return;
-  const { data: orders } = await supabaseClient.from('vcp-op-orders').select('po_number, wh_id').order('created_at', { ascending: false });
-  exportPoSelect.innerHTML = '<option value="ALL">-- SEMUA PO / DATA --</option>';
-  if (orders) {
-    const uniquePos = [...new Set(orders.map(o => o.po_number))];
-    uniquePos.forEach(po => {
-      const opt = document.createElement('option');
-      opt.value = po;
-      opt.innerText = `PO: ${po}`;
-      exportPoSelect.appendChild(opt);
-    });
-  }
+  if (!document.getElementById('exportPoList') || !supabaseClient) return;
+  const { data } = await supabaseClient.from('vcp-op-orders')
+    .select('po_number, wh_id, blend_code, arrival_date, arrival_time')
+    .order('arrival_date', { ascending: false }).order('arrival_time', { ascending: true });
+  exportOrders = data || [];
+  const dates = [...new Set(exportOrders.map(o => o.arrival_date))];
+  document.getElementById('exportDateSelect').innerHTML =
+    '<option value="">Semua tanggal</option>' + dates.map(d => `<option value="${d}">${d}</option>`).join('');
+  refreshExportRitOptions();
+  selectVisibleExport();
+}
+
+function initExportPicker() {
+  const dateSel = document.getElementById('exportDateSelect');
+  const ritSel = document.getElementById('exportRitFilter');
+  const allBox = document.getElementById('exportPoAll');
+  const list = document.getElementById('exportPoList');
+  if (!dateSel || !ritSel || !allBox || !list) return;
+
+  dateSel.addEventListener('change', () => { refreshExportRitOptions(); selectVisibleExport(); });
+  ritSel.addEventListener('change', selectVisibleExport);
+  allBox.addEventListener('change', () => {
+    exportVisibleOrders().forEach(o => allBox.checked ? exportSelected.add(exportKey(o)) : exportSelected.delete(exportKey(o)));
+    renderExportPoList();
+  });
+  list.addEventListener('change', (e) => {
+    const k = e.target.dataset.key;
+    if (!k) return;
+    e.target.checked ? exportSelected.add(k) : exportSelected.delete(k);
+    updateExportCount();
+  });
 }
 
 async function exportScanLogsToExcel() {
@@ -490,28 +547,35 @@ async function exportScanLogsToExcel() {
   const manualInput = document.getElementById('manualPoInputAdmin');
   const isManual = manualInput && manualInput.style.display === 'block';
   let selectedPO = 'ALL';
+  let poList = null;
 
   // Cek apakah Admin menggunakan Input Manual atau Dropdown
   if (isManual) {
     selectedPO = manualInput.value.trim();
     if (!selectedPO) return showFeedback('⚠️ Ketik atau Scan Nomor PO terlebih dahulu!', 'warning');
   } else {
-    const exportPoSelect = document.getElementById('exportPoSelect');
-    selectedPO = exportPoSelect ? exportPoSelect.value : 'ALL';
+    if (exportSelected.size === 0) return showFeedback('⚠️ Pilih minimal 1 PO untuk di-export.', 'warning');
+    const keys = [...exportSelected];
+    poList = [...new Set(keys.map(k => k.split('___')[0]))];
+    selectedPO = keys.length === exportOrders.length ? 'ALL' : (poList.length === 1 ? poList[0] : `Multi_${keys.length}PO`);
   }
 
   showFeedback('⏳ Mengambil data scan log...', 'warning');
 
   try {
     let query = supabaseClient.from('vcp-op-scan_logs').select('*').order('scanned_at', { ascending: false });
-    if (selectedPO !== 'ALL') query = query.eq('po_number', selectedPO);
-    const { data: logs, error } = await query;
+    if (isManual) query = query.eq('po_number', selectedPO);
+    else if (selectedPO !== 'ALL') query = query.in('po_number', poList);
+    const { data: rawLogs, error } = await query;
     if (error) throw error;
+    // Saring per pasangan PO + RIT sesuai centang (PO yang sama bisa punya RIT berbeda)
+    const logs = (isManual || selectedPO === 'ALL') ? rawLogs : (rawLogs || []).filter(l => exportSelected.has(`${l.po_number}___${l.arrival_time}`));
     if (!logs || logs.length === 0) return showFeedback('⚠️ Tidak ada data scan untuk di-export.', 'warning');
 
     const formattedData = logs.map((item, index) => ({
       'No': index + 1,
       'PO Number': item.po_number,
+      'Arrival Date': (exportOrders.find(o => o.po_number === item.po_number && o.arrival_time === item.arrival_time) || {}).arrival_date || '-',
       'Arrival Time (RIT)': item.arrival_time,
       'Serial Number': item.serial_number,
       'LOT Code': item.lot_code,

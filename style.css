@@ -185,3 +185,16 @@ tbody tr:last-child td { border-bottom: 0; }
   .banner, .feedback-banner { bottom: 20px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- Admin: picker multi-PO ---------- */
+.po-picker-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 0 6px; font-size: 13px; color: var(--muted); }
+.check-row, .po-item { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.check-row { margin: 0; font-weight: 700; color: var(--ink); }
+.check-row input, .po-item input { width: 22px; height: 22px; accent-color: var(--ink); flex: none; }
+.po-list { max-height: 40vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+.po-item { min-height: 52px; padding: 6px 12px; margin: 0; flex-wrap: wrap; border-bottom: 1px solid #eceef1; color: var(--text); }
+.po-item:last-child { border-bottom: 0; }
+.po-item:has(input:checked) { background: var(--gold-soft); }
+.po-main { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.po-meta { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: auto; }
+.po-empty { padding: 16px; text-align: center; color: var(--muted); }
