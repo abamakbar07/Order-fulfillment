@@ -198,3 +198,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .po-main { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .po-meta { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: auto; }
 .po-empty { padding: 16px; text-align: center; color: var(--muted); }
+
+/* Navigation Tabs */
+.tabs { display: flex; background: #fff; margin-bottom: 12px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+.tab-btn { flex: 1; padding: 12px; font-weight: bold; border: none; background: #edf2f7; color: #4a5568; cursor: pointer; transition: 0.3s; font-size: 12px; }
+.tab-btn.active { background: #3182ce; color: #fff; }
+.loading-summary { background: #ebf8ff; padding: 12px; border-radius: 8px; border: 1px dashed #dd6b20; margin-bottom: 10px; font-size: 12px; }

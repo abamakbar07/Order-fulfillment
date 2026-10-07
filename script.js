@@ -719,8 +719,145 @@ function initScannerPage() {
   const modalDispatch = document.getElementById('modalDispatch');
   const btnSubmitDispatch = document.getElementById('btnSubmitDispatch');
 
+  const tabPicking = document.getElementById('tabPicking');
+  const tabLoading = document.getElementById('tabLoading');
+  const viewPicking = document.getElementById('viewPicking');
+  const viewLoading = document.getElementById('viewLoading');
+  
+  const loadDateSelect = document.getElementById('loadDateSelect');
+  const loadRitSelect = document.getElementById('loadRitSelect');
+  const barcodeInputLoad = document.getElementById('barcodeInputLoad');
+  const btnOpenDispatchNew = document.getElementById('btnOpenDispatchNew');
+  
+  let activeLoadDate = null;
+  let activeLoadRIT = null;
+  let currentLoadLogs = []; // Data scan logs untuk divalidasi
+
   fetchAllOrders();
   keepInputFocused();
+
+  tabPicking.addEventListener('click', () => {
+    tabPicking.classList.add('active'); tabLoading.classList.remove('active');
+    viewPicking.style.display = 'block'; viewLoading.style.display = 'none';
+    barcodeInput.focus();
+  });
+
+  tabLoading.addEventListener('click', () => {
+    tabLoading.classList.add('active'); tabPicking.classList.remove('active');
+    viewLoading.style.display = 'block'; viewPicking.style.display = 'none';
+    populateLoadDates();
+  });
+
+  function populateLoadDates() {
+    loadDateSelect.innerHTML = '<option value="">- Date -</option>';
+    const dates = [...new Set(allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID).map(i => i.arrival_date))];
+    dates.forEach(d => {
+      const opt = document.createElement('option'); opt.value = d; opt.innerText = d;
+      loadDateSelect.appendChild(opt);
+    });
+  }
+
+  loadDateSelect.addEventListener('change', () => {
+    activeLoadDate = loadDateSelect.value;
+    loadRitSelect.innerHTML = '<option value="">- RIT -</option>';
+    loadRitSelect.disabled = !activeLoadDate;
+    document.getElementById('loadingPanel').style.display = 'none';
+    
+    if (!activeLoadDate) return;
+    const rits = [...new Set(allOrdersData.filter(i => (i.wh_id || 'WH01') === activeWHID && i.arrival_date === activeLoadDate).map(i => i.arrival_time))];
+    rits.forEach(r => {
+      const opt = document.createElement('option'); opt.value = r; opt.innerText = r;
+      loadRitSelect.appendChild(opt);
+    });
+  });
+
+  loadRitSelect.addEventListener('change', async () => {
+    activeLoadRIT = loadRitSelect.value;
+    if (!activeLoadRIT) {
+      document.getElementById('loadingPanel').style.display = 'none';
+      return;
+    }
+    await fetchLoadingData();
+  });
+
+  async function fetchLoadingData() {
+    showFeedback('⏳ Memuat data staging RIT...', 'warning');
+    document.getElementById('loadingPanel').style.display = 'block';
+    barcodeInputLoad.focus();
+    
+    try {
+      // Ambil seluruh box yang pernah di-scan di PO pada Tanggal & RIT ini
+      const poList = allOrdersData.filter(i => i.arrival_date === activeLoadDate && i.arrival_time === activeLoadRIT).map(i => i.po_number);
+      
+      const { data, error } = await supabaseClient.from('vcp-op-scan_logs')
+        .select('id, serial_number, is_loaded, net_weight_kg')
+        .eq('arrival_time', activeLoadRIT)
+        .in('po_number', poList);
+        
+      if (error) throw error;
+      currentLoadLogs = data || [];
+      renderLoadingProgress();
+    } catch (err) {
+      showFeedback(`❌ Error loading data: ${err.message}`, 'error');
+    }
+  }
+
+  function renderLoadingProgress() {
+    const totalBox = currentLoadLogs.length;
+    const loadedBox = currentLoadLogs.filter(b => b.is_loaded).length;
+    
+    document.getElementById('lblTotalToLoad').innerText = `${totalBox} Box`;
+    document.getElementById('lblTotalLoaded').innerText = `${loadedBox} Box`;
+    
+    const pct = totalBox > 0 ? Math.round((loadedBox / totalBox) * 100) : 0;
+    document.getElementById('loadProgressBar').style.width = `${pct}%`;
+    document.getElementById('loadProgressBar').style.backgroundColor = pct >= 100 ? '#38a169' : '#dd6b20';
+    
+    // Syarat Validasi: Jika semua box sudah is_loaded = TRUE, tombol 4 Foto TRUK akan menyala
+    btnOpenDispatchNew.disabled = (totalBox === 0 || loadedBox < totalBox);
+  }
+
+  // --- SCAN-TO-LOAD VALIDATOR ---
+  barcodeInputLoad.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter') {
+      const rawBarcode = barcodeInputLoad.value.trim();
+      barcodeInputLoad.value = '';
+      if (!rawBarcode) return;
+
+      const parsed = parseHMSBarcode(rawBarcode);
+      if (!parsed.isValid) return triggerFeedback('error'), showFeedback(`❌ ${parsed.message}`, 'error');
+
+      // Cek apakah Serial Number ini masuk dalam daftar Staging RIT ini
+      const matchedBox = currentLoadLogs.find(b => b.serial_number === parsed.serialNumber);
+      
+      if (!matchedBox) {
+        triggerFeedback('error');
+        return showFeedback(`❌ SALAH BARANG! Box ${parsed.serialNumber} BUKAN milik RIT ini / Belum di-Picking!`, 'error');
+      }
+
+      if (matchedBox.is_loaded) {
+        triggerFeedback('warning');
+        return showFeedback(`⚠️ DUPLIKAT! Box ini SUDAH tervalidasi masuk truk.`, 'warning');
+      }
+
+      // Jika cocok dan belum di-load -> Update DB
+      try {
+        const checkerName = checkerNameInput ? checkerNameInput.value.trim() || 'anon' : 'anon';
+        const { error } = await supabaseClient.from('vcp-op-scan_logs')
+          .update({ is_loaded: true, loaded_at: new Date().toISOString(), loaded_by: checkerName })
+          .eq('id', matchedBox.id);
+
+        if (error) throw error;
+        
+        matchedBox.is_loaded = true; // Update state lokal
+        triggerFeedback('success');
+        showFeedback(`✅ VALID! Box Masuk Truk.`, 'success');
+        renderLoadingProgress();
+      } catch (err) {
+        showFeedback(`❌ Gagal update status: ${err.message}`, 'error');
+      }
+    }
+  });
 
   // Keyboard virtual disembunyikan default (scanner hardware); tombol ini untuk ketik manual
   const btnKeyboard = document.getElementById('btnKeyboard');
@@ -1137,7 +1274,10 @@ _Reported via VCP-OP RF Scanner App_`;
     finally { btnSubmitMonitoring.disabled = false; btnSubmitMonitoring.innerText = '💾 Simpan Evidence Monitoring'; }
   });
 
-  btnOpenDispatch.addEventListener('click', () => { if (!activePO) return; modalDispatch.style.display = 'flex'; });
+  // btnOpenDispatch.addEventListener('click', () => { if (!activePO) return; modalDispatch.style.display = 'flex'; });
+  btnOpenDispatchNew.addEventListener('click', () => {
+    modalDispatch.style.display = 'flex';
+  });
   btnCloseDispatch.addEventListener('click', () => modalDispatch.style.display = 'none');
 
   btnSubmitDispatch.addEventListener('click', async () => {
@@ -1157,17 +1297,26 @@ _Reported via VCP-OP RF Scanner App_`;
       const { data: sessionData, error: errSession } = await supabaseClient.from('vcp-op-outbound_dispatch_sessions').insert([{
         dispatch_code: `DISP-${Date.now()}-${ritNum.replace(/\s+/g, '')}`,
         wh_id: activeWHID || 'WH01', rit_number: ritNum, vehicle_number: vehicle,
-        eta_time: String(new Date().getHours()).padStart(2, '0') + ':' + String(new Date().getMinutes()).padStart(2, '0'),
+        eta_time: activeLoadRIT, // Gunakan activeLoadRIT dari filter
         photo_trap_out_before_url: urlOutBefore, photo_trap_in_before_url: urlInBefore, photo_trap_out_after_url: urlOutAfter, photo_trap_in_after_url: urlInAfter, created_by: checkerNameInput.value.trim() || 'anon'
       }]).select().single();
       if (errSession) throw errSession;
 
-      const { error: errOrder } = await supabaseClient.from('vcp-op-orders').update({ dispatch_id: sessionData.id }).eq('po_number', activePO).eq('arrival_time', activeRIT);
+      // UPDATE MASSAL: Semua PO yang Arrival Date & Time nya sama dengan RIT yang sedang di-load akan ter-link ke Dispatch ID ini!
+      const { error: errOrder } = await supabaseClient.from('vcp-op-orders')
+        .update({ dispatch_id: sessionData.id })
+        .eq('arrival_date', activeLoadDate)
+        .eq('arrival_time', activeLoadRIT)
+        .eq('wh_id', activeWHID || 'WH01');
+        
       if (errOrder) throw errOrder;
 
-      showFeedback('🎉 Loading Berhasil!', 'success');
+      showFeedback('🎉 Proses Muat Truk Selesai 100%!', 'success');
       modalDispatch.style.display = 'none';
       ['dispRit','dispVehicle','photoTrapOutBefore','photoTrapInBefore','photoTrapOutAfter','photoTrapInAfter'].forEach(id => document.getElementById(id).value = '');
+      
+      // Auto-kembali ke tab Picking setelah loading selesai
+      tabPicking.click();
     } catch (err) { showFeedback(`❌ Error Dispatch: ${err.message}`, 'error'); } 
     finally { btnSubmitDispatch.disabled = false; btnSubmitDispatch.innerText = '🚀 Selesaikan Loading'; }
   });
