@@ -1330,8 +1330,231 @@ _Reported via VCP-OP RF Scanner App_`;
   });
 }
 
+// ==========================================
+// DASHBOARD ANALYTICS MODULE
+// ==========================================
+function initDashboardPage() {
+  const dashWhSelect = document.getElementById('dashWhSelect');
+  const dashDateSelect = document.getElementById('dashDateSelect');
+  const dashRitSelect = document.getElementById('dashRitSelect');
+  const btnRefreshDash = document.getElementById('btnRefreshDash');
+  const btnExportDash = document.getElementById('btnExportDash');
+  const dashTableBody = document.getElementById('dashTableBody');
+  
+  let dashDataGlobal = []; // Menyimpan raw data untuk tabel & export
+
+  async function loadDashboardFilters() {
+    try {
+      const { data: orders } = await supabaseClient.from('vcp-op-orders').select('wh_id, arrival_date, arrival_time');
+      if (!orders) return;
+
+      // Populate WHID
+      const whids = [...new Set(orders.map(o => o.wh_id || 'WH01'))];
+      dashWhSelect.innerHTML = '<option value="ALL">-- SEMUA WAREHOUSE --</option>';
+      whids.forEach(w => dashWhSelect.innerHTML += `<option value="${w}">${w}</option>`);
+
+      // Populate Dates
+      const dates = [...new Set(orders.map(o => o.arrival_date))].sort().reverse(); // Terbaru di atas
+      dashDateSelect.innerHTML = '<option value="">- Loading Dates -</option>';
+      dates.forEach(d => dashDateSelect.innerHTML += `<option value="${d}">${d}</option>`);
+      
+      // Auto-select tanggal terbaru jika ada
+      if (dates.length > 0) {
+        dashDateSelect.value = dates[0];
+        populateRitFilter();
+        fetchDashboardData();
+      }
+    } catch (err) {
+      showFeedback(`Gagal load filter: ${err.message}`, 'error');
+    }
+  }
+
+  function populateRitFilter() {
+    dashRitSelect.innerHTML = '<option value="ALL">-- SEMUA RIT --</option>';
+    dashRitSelect.disabled = true;
+    
+    if (!dashDateSelect.value) return;
+    dashRitSelect.disabled = false;
+    
+    // Nanti akan diisi secara dinamis setelah fetchDashboardData
+  }
+
+  dashDateSelect.addEventListener('change', () => {
+    populateRitFilter();
+    fetchDashboardData();
+  });
+  
+  dashWhSelect.addEventListener('change', fetchDashboardData);
+  dashRitSelect.addEventListener('change', renderDashboardTable);
+  btnRefreshDash.addEventListener('click', fetchDashboardData);
+
+  async function fetchDashboardData() {
+    const activeDate = dashDateSelect.value;
+    const activeWh = dashWhSelect.value;
+    if (!activeDate) return;
+
+    dashTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">⏳ Mengkalkulasi Data Live...</td></tr>';
+    
+    try {
+      // 1. Ambil Orders hari itu
+      let queryOrders = supabaseClient.from('vcp-op-orders').select('*').eq('arrival_date', activeDate);
+      if (activeWh !== 'ALL') queryOrders = queryOrders.eq('wh_id', activeWh);
+      
+      const { data: orders } = await queryOrders;
+      if (!orders || orders.length === 0) {
+        dashDataGlobal = [];
+        return renderDashboardTable();
+      }
+
+      // Populate RIT Dropdown berdasarkan orders yang didapat
+      const rits = [...new Set(orders.map(o => o.arrival_time))].sort();
+      dashRitSelect.innerHTML = '<option value="ALL">-- SEMUA RIT --</option>';
+      rits.forEach(r => dashRitSelect.innerHTML += `<option value="${r}">${r}</option>`);
+
+      const poList = orders.map(o => o.po_number);
+
+      // 2. Ambil Target Items (Qty Target)
+      const { data: items } = await supabaseClient.from('vcp-op-order_items').select('*').in('po_number', poList);
+      
+      // 3. Ambil Scan Logs (Progress Picking & Loading)
+      const { data: logs } = await supabaseClient.from('vcp-op-scan_logs').select('*').in('po_number', poList);
+
+      // 4. Kalkulasi Data (Join & Math)
+      dashDataGlobal = orders.map(po => {
+        // Cari target
+        const poItems = items.filter(i => i.po_number === po.po_number && i.arrival_time === po.arrival_time);
+        const targetCt = poItems.reduce((sum, item) => sum + Number(item.qty_usage_ct), 0);
+        
+        // Cari progress dari logs
+        const poLogs = logs.filter(l => l.po_number === po.po_number && l.arrival_time === po.arrival_time);
+        
+        let pickedCt = 0;
+        let loadedCt = 0;
+
+        // Hitung CT berdasarkan standar berat (SKU Master)
+        poLogs.forEach(log => {
+          const stdWeight = skuMasterMap.get(log.lot_code) || 200.0;
+          const boxCt = Number(log.net_weight_kg) / stdWeight;
+          pickedCt += boxCt;
+          if (log.is_loaded) loadedCt += boxCt;
+        });
+
+        pickedCt = parseFloat(pickedCt.toFixed(2));
+        loadedCt = parseFloat(loadedCt.toFixed(2));
+
+        // Tentukan Status Real-Time
+        let status = 'OPEN';
+        let badge = 'badge-open'; // CSS class dari style.css
+        
+        if (loadedCt >= targetCt && targetCt > 0) {
+          status = 'DISPATCHED'; badge = 'badge-done';
+        } else if (pickedCt >= targetCt && targetCt > 0) {
+          status = 'STAGING (Ready Load)'; badge = 'badge-partial'; // Kuning
+        } else if (pickedCt > 0) {
+          status = 'PICKING'; badge = 'badge-open';
+        }
+
+        return {
+          po_number: po.po_number,
+          wh_id: po.wh_id || 'WH01',
+          rit: po.arrival_time,
+          blend: po.blend_code || '-',
+          target: targetCt,
+          picked: pickedCt,
+          loaded: loadedCt,
+          status: status,
+          badge: badge
+        };
+      });
+
+      renderDashboardTable();
+
+    } catch (err) {
+      dashTableBody.innerHTML = `<tr><td colspan="8" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`;
+    }
+  }
+
+  function renderDashboardTable() {
+    if (dashDataGlobal.length === 0) {
+      document.getElementById('scoreTarget').innerText = '0';
+      document.getElementById('scorePicked').innerText = '0';
+      document.getElementById('scoreLoaded').innerText = '0';
+      document.getElementById('scorePct').innerText = '0%';
+      dashTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Tidak ada PO pada filter ini.</td></tr>';
+      return;
+    }
+
+    const activeRit = dashRitSelect.value;
+    const filteredData = activeRit === 'ALL' ? dashDataGlobal : dashDataGlobal.filter(d => d.rit === activeRit);
+
+    let html = '';
+    let sumTarget = 0, sumPicked = 0, sumLoaded = 0;
+
+    filteredData.forEach(d => {
+      sumTarget += d.target;
+      sumPicked += d.picked;
+      sumLoaded += d.loaded;
+
+      html += `
+        <tr>
+          <td><strong>${d.po_number}</strong></td>
+          <td>${d.wh_id}</td>
+          <td>${d.rit}</td>
+          <td>${d.blend}</td>
+          <td style="font-weight:bold;">${d.target}</td>
+          <td style="color: #2b6cb0; font-weight:bold;">${d.picked}</td>
+          <td style="color: #c05621; font-weight:bold;">${d.loaded}</td>
+          <td style="text-align:center;"><span class="status-badge ${d.badge}">${d.status}</span></td>
+        </tr>
+      `;
+    });
+
+    dashTableBody.innerHTML = html;
+
+    // Update Scorecards
+    document.getElementById('scoreTarget').innerText = sumTarget;
+    document.getElementById('scorePicked').innerText = parseFloat(sumPicked.toFixed(1));
+    document.getElementById('scoreLoaded').innerText = parseFloat(sumLoaded.toFixed(1));
+    
+    const pct = sumTarget > 0 ? Math.round((sumLoaded / sumTarget) * 100) : 0;
+    document.getElementById('scorePct').innerText = `${pct}%`;
+    document.getElementById('scorePct').style.color = pct >= 100 ? '#2f855a' : '#dd6b20';
+  }
+
+  // EXPORT TO EXCEL
+  btnExportDash.addEventListener('click', () => {
+    if (dashDataGlobal.length === 0) return showFeedback('⚠️ Tidak ada data untuk diexport!', 'warning');
+    
+    const activeRit = dashRitSelect.value;
+    const filteredData = activeRit === 'ALL' ? dashDataGlobal : dashDataGlobal.filter(d => d.rit === activeRit);
+
+    const exportData = filteredData.map((d, index) => ({
+      'No': index + 1,
+      'PO Number': d.po_number,
+      'Warehouse': d.wh_id,
+      'RIT (Arrival Time)': d.rit,
+      'Blend': d.blend,
+      'Target Qty (CT)': d.target,
+      'Picked Qty (CT)': d.picked,
+      'Loaded Qty (CT)': d.loaded,
+      'Current Status': d.status
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Analytics");
+    
+    const fileName = `Dashboard_VCP-OP_${dashDateSelect.value}_RIT-${activeRit.replace(':', '')}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    showFeedback('✅ Dashboard Analytics berhasil diexport!', 'success');
+  });
+
+  loadDashboardFilters();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSkuMaster();
   if (document.getElementById('barcodeInput')) initScannerPage();
   if (document.getElementById('dropzoneOrder') || document.getElementById('dropzoneSku')) initAdminPage();
+  if (document.getElementById('dashboardPage')) initDashboardPage(); // Trigger Dashboard
 });
