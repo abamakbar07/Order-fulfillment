@@ -426,23 +426,69 @@ async function saveToSupabase() {
   } finally { btnSaveToDb.disabled = false; }
 }
 
-async function loadMasterData() {
-  const masterPoTbody = document.getElementById('masterPoTbody');
-  if (!masterPoTbody || !supabaseClient) return;
-  masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading data master...</td></tr>';
-  
-  try {
-    const { data: orders, error: errOrders } = await supabaseClient.from('vcp-op-orders').select('*').order('arrival_date', { ascending: false });
-    if (errOrders) throw errOrders;
+// --- STATE & ELEMEN FILTER ADMIN ---
+  let adminMasterOrders = [];
+  let adminItemsData = [];
+  const adminWhSelect = document.getElementById('adminWhSelect');
+  const adminDateSelect = document.getElementById('adminDateSelect');
+  const adminRitSelect = document.getElementById('adminRitSelect');
+  const btnBulkDelete = document.getElementById('btnBulkDelete');
 
-    const { data: items, error: errItems } = await supabaseClient.from('vcp-op-order_items').select('po_number, arrival_time');
-    if (errItems) throw errItems;
+  async function loadMasterData() {
+    const masterPoTbody = document.getElementById('masterPoTbody');
+    if (!masterPoTbody || !supabaseClient) return;
+    masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading data master...</td></tr>';
+    
+    try {
+      const { data: orders, error: errOrders } = await supabaseClient.from('vcp-op-orders').select('*').order('arrival_date', { ascending: false });
+      if (errOrders) throw errOrders;
 
-    if (!orders || orders.length === 0) return masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Belum ada PO tersimpan.</td></tr>';
+      const { data: items, error: errItems } = await supabaseClient.from('vcp-op-order_items').select('po_number, arrival_time');
+      if (errItems) throw errItems;
+
+      adminMasterOrders = orders || [];
+      adminItemsData = items || [];
+      
+      populateAdminFilters();
+      renderMasterTable();
+    } catch (err) { masterPoTbody.innerHTML = `<tr><td colspan="7" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`; }
+  }
+
+  function populateAdminFilters() {
+    if (!adminWhSelect) return;
+    const whids = [...new Set(adminMasterOrders.map(o => o.wh_id || 'WH01'))];
+    const dates = [...new Set(adminMasterOrders.map(o => o.arrival_date))];
+    const rits = [...new Set(adminMasterOrders.map(o => o.arrival_time))];
+
+    adminWhSelect.innerHTML = '<option value="ALL">-- SEMUA WHID --</option>';
+    whids.forEach(w => adminWhSelect.innerHTML += `<option value="${w}">${w}</option>`);
+
+    adminDateSelect.innerHTML = '<option value="ALL">-- SEMUA TGL --</option>';
+    dates.forEach(d => adminDateSelect.innerHTML += `<option value="${d}">${d}</option>`);
+
+    adminRitSelect.innerHTML = '<option value="ALL">-- SEMUA RIT --</option>';
+    rits.forEach(r => adminRitSelect.innerHTML += `<option value="${r}">${r}</option>`);
+  }
+
+  // Event Listener Filter Admin
+  if(adminWhSelect) adminWhSelect.addEventListener('change', renderMasterTable);
+  if(adminDateSelect) adminDateSelect.addEventListener('change', renderMasterTable);
+  if(adminRitSelect) adminRitSelect.addEventListener('change', renderMasterTable);
+
+  function renderMasterTable() {
+    const masterPoTbody = document.getElementById('masterPoTbody');
+    if (!masterPoTbody) return;
+
+    let filtered = adminMasterOrders;
+    if (adminWhSelect.value !== 'ALL') filtered = filtered.filter(o => o.wh_id === adminWhSelect.value);
+    if (adminDateSelect.value !== 'ALL') filtered = filtered.filter(o => o.arrival_date === adminDateSelect.value);
+    if (adminRitSelect.value !== 'ALL') filtered = filtered.filter(o => o.arrival_time === adminRitSelect.value);
+
+    if (filtered.length === 0) return masterPoTbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data sesuai filter.</td></tr>';
     
     masterPoTbody.innerHTML = '';
-    orders.forEach(po => {
-      const lotCount = items.filter(i => i.po_number === po.po_number && i.arrival_time === po.arrival_time).length;
+    filtered.forEach(po => {
+      const lotCount = adminItemsData.filter(i => i.po_number === po.po_number && i.arrival_time === po.arrival_time).length;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>${po.wh_id || 'WH01'}</strong></td>
@@ -451,23 +497,59 @@ async function loadMasterData() {
         <td>${po.arrival_date || '-'}</td>
         <td>${po.arrival_time || '-'}</td>
         <td><strong>${lotCount} LOT</strong></td>
-        <td><button class="btn btn-danger btn-sm" onclick="deletePO('${po.po_number}', '${po.arrival_time}')">Hapus</button></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deletePO('${po.po_number}', '${po.arrival_time}')">Hapus 1 PO</button></td>
       `;
       masterPoTbody.appendChild(tr);
     });
-  } catch (err) { masterPoTbody.innerHTML = `<tr><td colspan="7" style="color:red; text-align:center;">Error: ${err.message}</td></tr>`; }
-}
+  }
 
-window.deletePO = async function(poNumber, arrivalTime) {
-  if (!confirm(`Yakin ingin menghapus PO [${poNumber}] (RIT: ${arrivalTime}) beserta seluruh LOT terkait?`)) return;
-  try {
-    const { error } = await supabaseClient.from('vcp-op-orders').delete().eq('po_number', poNumber).eq('arrival_time', arrivalTime);
-    if (error) throw error;
-    showFeedback(`🗑️ PO [${poNumber}] RIT [${arrivalTime}] berhasil dihapus!`, 'success');
-    await loadMasterData();
-    await populateExportPODropdown();
-  } catch (err) { showFeedback(`❌ Delete error: ${err.message}`, 'error'); }
-};
+  // LOGIKA HAPUS 1 PO (Bersih Sampai ke Akar)
+  window.deletePO = async function(poNumber, arrivalTime) {
+    if (!confirm(`Yakin ingin menghapus PO [${poNumber}] (RIT: ${arrivalTime}) beserta seluruh LOT terkait?`)) return;
+    try {
+      await supabaseClient.from('vcp-op-scan_logs').delete().eq('po_number', poNumber).eq('arrival_time', arrivalTime);
+      await supabaseClient.from('vcp-op-staging_monitoring_logs').delete().eq('po_number', poNumber).eq('arrival_time', arrivalTime);
+      await supabaseClient.from('vcp-op-order_items').delete().eq('po_number', poNumber).eq('arrival_time', arrivalTime);
+      const { error } = await supabaseClient.from('vcp-op-orders').delete().eq('po_number', poNumber).eq('arrival_time', arrivalTime);
+      
+      if (error) throw error;
+      showFeedback(`🗑️ PO [${poNumber}] berhasil dihapus utuh!`, 'success');
+      await loadMasterData();
+      await populateExportPODropdown();
+    } catch (err) { showFeedback(`❌ Delete error: ${err.message}`, 'error'); }
+  };
+
+  // LOGIKA HAPUS MASSAL (BULK DELETE) BERDASARKAN FILTER
+  if(btnBulkDelete) {
+    btnBulkDelete.addEventListener('click', async () => {
+      let toDelete = adminMasterOrders;
+      if (adminWhSelect.value !== 'ALL') toDelete = toDelete.filter(o => o.wh_id === adminWhSelect.value);
+      if (adminDateSelect.value !== 'ALL') toDelete = toDelete.filter(o => o.arrival_date === adminDateSelect.value);
+      if (adminRitSelect.value !== 'ALL') toDelete = toDelete.filter(o => o.arrival_time === adminRitSelect.value);
+
+      if(toDelete.length === 0) return showFeedback('⚠️ Tidak ada data untuk dihapus dengan filter ini.', 'warning');
+      if(adminWhSelect.value === 'ALL' && adminDateSelect.value === 'ALL' && adminRitSelect.value === 'ALL') {
+        if(!confirm('PERINGATAN! Anda akan menghapus SELURUH DATABASE. Lanjutkan?')) return;
+      } else {
+        if(!confirm(`Yakin ingin menghapus ${toDelete.length} PO secara massal beserta semua logs/fotonya?`)) return;
+      }
+
+      showFeedback('⏳ Sedang menghapus data secara massal...', 'warning');
+      try {
+        const poList = toDelete.map(o => o.po_number);
+        // Hapus paksa semuanya dari child ke parent
+        await supabaseClient.from('vcp-op-scan_logs').delete().in('po_number', poList);
+        await supabaseClient.from('vcp-op-staging_monitoring_logs').delete().in('po_number', poList);
+        await supabaseClient.from('vcp-op-order_items').delete().in('po_number', poList);
+        const { error } = await supabaseClient.from('vcp-op-orders').delete().in('po_number', poList);
+
+        if (error) throw error;
+        showFeedback(`🗑️ ${toDelete.length} Data PO berhasil dihapus massal!`, 'success');
+        await loadMasterData();
+        await populateExportPODropdown();
+      } catch(err) { showFeedback(`❌ Error Hapus Massal: ${err.message}`, 'error'); }
+    });
+  }
 
 // ---------- Export picker: pilih banyak PO, filter per tanggal / RIT ----------
 let exportOrders = [];
@@ -1522,31 +1604,73 @@ function initDashboardPage() {
   }
 
   // EXPORT TO EXCEL
-  btnExportDash.addEventListener('click', () => {
+  // COMPREHENSIVE EXPORT TO EXCEL (MULTI-SHEET)
+  btnExportDash.addEventListener('click', async () => {
     if (dashDataGlobal.length === 0) return showFeedback('⚠️ Tidak ada data untuk diexport!', 'warning');
+    showFeedback('⏳ Mengambil & Merangkum Data Master...', 'warning');
     
     const activeRit = dashRitSelect.value;
-    const filteredData = activeRit === 'ALL' ? dashDataGlobal : dashDataGlobal.filter(d => d.rit === activeRit);
+    const filteredSummary = activeRit === 'ALL' ? dashDataGlobal : dashDataGlobal.filter(d => d.rit === activeRit);
+    const poList = filteredSummary.map(d => d.po_number);
 
-    const exportData = filteredData.map((d, index) => ({
-      'No': index + 1,
-      'PO Number': d.po_number,
-      'Warehouse': d.wh_id,
-      'RIT (Arrival Time)': d.rit,
-      'Blend': d.blend,
-      'Target Qty (CT)': d.target,
-      'Picked Qty (CT)': d.picked,
-      'Loaded Qty (CT)': d.loaded,
-      'Current Status': d.status
-    }));
+    try {
+      // Fetch 3 Database Referensi
+      const { data: logs } = await supabaseClient.from('vcp-op-scan_logs').select('*').in('po_number', poList);
+      const { data: staging } = await supabaseClient.from('vcp-op-staging_monitoring_logs').select('*').in('po_number', poList);
+      
+      // Ambil ID Sesi Dispatch dari data filter yang memiliki ID Truk
+      const dispatchIds = [...new Set(filteredSummary.map(d => d.dispatch_id).filter(id => id))];
+      let dispatches = [];
+      if (dispatchIds.length > 0) {
+        const { data: disp } = await supabaseClient.from('vcp-op-outbound_dispatch_sessions').select('*').in('id', dispatchIds);
+        dispatches = disp || [];
+      }
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Analytics");
-    
-    const fileName = `Dashboard_VCP-OP_${dashDateSelect.value}_RIT-${activeRit.replace(':', '')}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
-    showFeedback('✅ Dashboard Analytics berhasil diexport!', 'success');
+      const workbook = XLSX.utils.book_new();
+
+      // SHEET 1: SUMMARY (Dari Dashboard)
+      const exportSummary = filteredSummary.map((d, index) => ({
+        'No': index + 1, 'PO Number': d.po_number, 'Warehouse': d.wh_id, 'RIT (Arrival)': d.rit, 'Blend': d.blend,
+        'Target Qty (CT)': d.target, 'Picked (CT)': d.picked, 'Loaded (CT)': d.loaded, 'Status': d.status
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportSummary), "1. Summary PO");
+
+      // SHEET 2: SCAN LOGS (Picking & Loading Tracking)
+      const exportLogs = (logs || []).map(l => ({
+        'PO Number': l.po_number, 'RIT': l.arrival_time, 'Serial Number': l.serial_number, 'LOT Code': l.lot_code,
+        'Net Wt (Kg)': l.net_weight_kg, 
+        'Status Picking': 'PICKED', 'Picked At': new Date(l.scanned_at).toLocaleString('id-ID'), 'Picker ID': l.scanned_by,
+        'Status Loading': l.is_loaded ? 'LOADED' : 'PENDING', 
+        'Loaded At': l.loaded_at ? new Date(l.loaded_at).toLocaleString('id-ID') : '-', 'Loader ID': l.loaded_by || '-'
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportLogs), "2. Box Tracking Logs");
+
+      // SHEET 3: STAGING & EVIDENCE MONITORING
+      const exportStaging = (staging || []).map(m => ({
+        'PO Number': m.po_number, 'RIT': m.arrival_time, 'No. Mori': m.nomor_kain_mori,
+        'Total Box Target': m.total_box, 'Serrico Qty Target': m.serrico_trap_qty,
+        'Jam Inspeksi': `${m.inspection_date} ${m.inspection_time}`, 'Inspektor': m.inspected_by,
+        'Link Foto Mori': m.photo_mori_url, 'Link Serrico Luar': m.photo_serrico_out_url, 'Link Serrico Dalam': m.photo_serrico_in_url
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportStaging), "3. Staging Evidence");
+
+      // SHEET 4: DISPATCH SESSIONS (Armada Truk)
+      const exportDispatch = (dispatches || []).map(d => ({
+        'Dispatch ID': d.dispatch_code, 'Tgl Loading': d.dispatch_date, 'RIT Ke-': d.rit_number, 'Plat Nomor': d.vehicle_number,
+        'Checker Armada': d.created_by,
+        'Foto Luar (Before)': d.photo_trap_out_before_url, 'Foto Dalam (Before)': d.photo_trap_in_before_url,
+        'Foto Luar (After)': d.photo_trap_out_after_url, 'Foto Dalam (After)': d.photo_trap_in_after_url
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportDispatch), "4. Armada Dispatch");
+
+      // SIMPAN FILE KE PC USER
+      const fileName = `Laporan_Lengkap_VCPOP_${dashDateSelect.value}_RIT-${activeRit.replace(':', '')}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      showFeedback('✅ Laporan Full Evidence berhasil diunduh!', 'success');
+
+    } catch (err) {
+      showFeedback(`❌ Gagal export detail: ${err.message}`, 'error');
+    }
   });
 
   loadDashboardFilters();
