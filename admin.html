@@ -3,54 +3,96 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - HMS Order Import & Management</title>
+  <title>Admin - VCP-OP Order & SKU Management</title>
   
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo-chip"><img src="assets/logo-assa.png" alt="ASSA"></span>
+      <div class="brand-text"><strong>Admin Portal</strong><small>Order & SKU VCP-OP</small></div>
+    </div>
+    <span class="logo-chip logo-chip--cust"><img src="assets/logo-hms.png" alt="HM Sampoerna"></span>
+  </header>
+
   <div class="container">
-    <!-- TOP BAR -->
-    <div class="card" style="padding: 10px 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: bold; color: #2c5282;">⚙️ HMS Admin Portal</span>
-        <a href="index.html" class="nav-link">📱 Buka RF Scanner App &rarr;</a>
+    <div class="card" style="display: flex; justify-content: flex-end;">
+      <a href="index.html" class="nav-link">📱 Buka RF Scanner</a>
+    </div>
+
+    <div id="statusBanner" class="banner"></div>
+
+    <!-- SECTION 1: SKU MASTER -->
+    <div class="card">
+      <div class="header-title">
+        <span>1. Upload SKU Master & Net Weight Template</span>
+        <div>
+          <button id="btnDownloadSkuTemplate" class="btn btn-secondary btn-sm" style="margin-right: 4px;">📥 Template SKU</button>
+          <button id="btnSaveSkuMaster" class="btn btn-success btn-sm" style="display:none;">💾 Simpan Master SKU</button>
+        </div>
+      </div>
+      <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
+        Upload file Excel/CSV berisi daftar SKU/Lot dan Standar Net Weight (kg).
+      </p>
+
+      <div class="dropzone" id="dropzoneSku">
+        <p>🏷️ Drag & Drop / Klik untuk Upload File SKU Master</p>
+        <input type="file" id="fileInputSku" accept=".xlsx, .xls, .csv" style="display: none;" />
+      </div>
+
+      <div id="previewSkuArea" style="display: none; margin-top: 15px;">
+        <div style="font-weight: bold; color: #4a5568; margin-bottom: 5px;">
+          Preview SKU Master (<span id="draftSkuCount">0</span> items):
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>SKU / Lot Code</th><th>Standard Net Weight (kg)</th></tr>
+            </thead>
+            <tbody id="previewSkuTbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <!-- FEEDBACK BANNER -->
-    <div id="statusBanner" class="banner"></div>
-
-    <!-- IMPORT SECTION -->
+    <!-- SECTION 2: IMPORT ORDER HMS -->
     <div class="card">
       <div class="header-title">
-        <span>1. Import / Upload Order HMS (Excel / CSV)</span>
-        <button id="btnSaveToDb" class="btn btn-success" style="display:none;">💾 Simpan ke Database</button>
+        <span>2. Import Order HMS (Excel / CSV)</span>
+        <div>
+          <button id="btnDownloadOrderTemplate" class="btn btn-secondary btn-sm" style="margin-right: 4px;">📥 Template Order</button>
+          <button id="btnSaveToDb" class="btn btn-success btn-sm" style="display:none;">💾 Simpan Order ke Database</button>
+        </div>
+      </div>
+      <p style="font-size: 11px; color: #666; margin-bottom: 8px;">
+        Wajib: <strong>PO Number, SKU / Lot Code, Qty (CT)</strong>. Opsional: Arrival Time (Jam RIT).
+      </p>
+
+      <div class="dropzone" id="dropzoneOrder">
+        <p>📁 Drag & Drop / Klik untuk Upload File Order</p>
+        <input type="file" id="fileInputOrder" accept=".xlsx, .xls, .csv" style="display: none;" />
       </div>
 
-      <div class="dropzone" id="dropzone">
-        <p>📁 Klik atau Drag & Drop File Excel/CSV di sini</p>
-        <span>Format support: .xlsx, .xls, .csv</span>
-        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" />
-      </div>
-
-      <!-- PREVIEW TABLE -->
       <div id="previewArea" style="display: none; margin-top: 15px;">
         <div style="font-weight: bold; color: #4a5568; margin-bottom: 5px;">
-          Preview Data Draft (<span id="draftCount">0</span> rows - Duplikat LOT digabungkan):
+          Preview Order Draft (<span id="draftCount">0</span> items unik):
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
+                <th>WHID</th>
                 <th>PO Number</th>
-                <th>Blend</th>
-                <th>Lot Code</th>
+                <th>SKU / Lot Code</th>
                 <th>Qty Usage (CT)</th>
                 <th>Arrival Date</th>
-                <th>Arrival Time</th>
+                <th>Arrival Time (RIT)</th>
+                <th>Blend</th>
               </tr>
             </thead>
             <tbody id="previewTbody"></tbody>
@@ -59,45 +101,88 @@
       </div>
     </div>
 
-    <!-- NEW TOOL: EXPORT DETAIL SCAN LOGS -->
+    <!-- SECTION 3: EXPORT REPORTS & PDF EVIDENCE -->
     <div class="card">
       <div class="header-title">
-        <span>2. Export Detail Scan Report (Excel)</span>
+        <span>3. Export Reports & PDF Evidence Generator</span>
       </div>
-      <div class="form-row" style="align-items: flex-end;">
-        <div class="form-group" style="flex: 2;">
-          <label for="exportPoSelect">PILIH PO TARGET:</label>
-          <select id="exportPoSelect">
-            <option value="ALL">-- SEMUA PO / DATA --</option>
-          </select>
+      
+      <!-- Export Excel Log (Berdasarkan PO) -->
+      <div class="export-row" style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px dashed #cbd5e1;">
+        <div class="form-group">
+          <label>Export Excel (data scan masuk)</label>
+          <span id="btnToggleManualAdmin" class="toggle-manual">Input Manual PO?</span>
+          <div id="exportPoSelect" class="po-picker">
+            <div class="form-row">
+              <div class="form-group"><label for="exportDateSelect">Tanggal</label><select id="exportDateSelect"><option value="">Semua tanggal</option></select></div>
+              <div class="form-group"><label for="exportRitFilter">RIT / jam</label><select id="exportRitFilter"><option value="">Semua RIT</option></select></div>
+            </div>
+            <div class="po-picker-head">
+              <label class="check-row"><input type="checkbox" id="exportPoAll"> Pilih semua yang tampil</label>
+              <strong id="exportPoCount">0 dipilih</strong>
+            </div>
+            <div id="exportPoList" class="po-list"><div class="po-empty">Memuat daftar PO...</div></div>
+          </div>
+          <input type="text" id="manualPoInputAdmin" placeholder="Ketik Nomor PO Manual / Scan Barcode..." style="display: none; margin-top: 4px;" />
         </div>
         <div class="form-group" style="flex: 1;">
-          <button id="btnExportLogs" class="btn btn-primary" style="width: 100%;">📥 Export to Excel</button>
+          <button id="btnExportLogs" class="btn btn-primary" style="width: 100%;">📥 Download Excel</button>
+        </div>
+      </div>
+
+      <!-- Export PDF Outbound (Berdasarkan Sesi Dispatch / Truk) -->
+      <div class="form-row" style="align-items: flex-end;">
+        <div class="form-group" style="flex: 2;">
+          <label style="color: #c53030; font-weight: bold;">CETAK PDF OUTBOUND (BERDASARKAN RIT TRUK):</label>
+          <select id="exportRitSelect"><option value="">-- PILIH SESI LOADING TRUK / RIT --</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <button id="btnGeneratePdf" class="btn btn-danger" style="width: 100%;">📄 Download PDF</button>
         </div>
       </div>
     </div>
 
-    <!-- MASTER DATA PO TABLE -->
+    <!-- SECTION 4: MASTER DATA ORDERS -->
     <div class="card">
       <div class="header-title">
-        <span>3. Master Data Order & Lot Terdaftar</span>
-        <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
+        <span>4. Master Data Order Terdaftar</span>
+        <div>
+          <button id="btnBulkDelete" class="btn btn-danger btn-sm">🗑️ Hapus Massal (Sesuai Filter)</button>
+          <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh Data</button>
+        </div>
+      </div>
+
+      <!-- FILTER PANEL UNTUK ADMIN -->
+      <div class="form-row" style="margin-bottom: 12px; padding: 10px; background: #f7fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div class="form-group" style="flex: 1;">
+          <label>Warehouse (WHID):</label>
+          <select id="adminWhSelect"><option value="ALL">-- SEMUA --</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Tanggal Kedatangan:</label>
+          <select id="adminDateSelect"><option value="ALL">-- SEMUA --</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>RITase:</label>
+          <select id="adminRitSelect"><option value="ALL">-- SEMUA --</option></select>
+        </div>
       </div>
 
       <div class="table-container">
         <table>
           <thead>
             <tr>
+              <th>WHID</th>
               <th>PO Number</th>
               <th>Blend</th>
               <th>Arrival Date</th>
-              <th>Arrival Time</th>
+              <th>Arrival Time (RIT)</th>
               <th>Total Lot</th>
               <th>Aksi</th>
             </tr>
           </thead>
           <tbody id="masterPoTbody">
-            <tr><td colspan="6" style="text-align: center;">Loading data master...</td></tr>
+            <tr><td colspan="7" style="text-align: center;">Loading data master...</td></tr>
           </tbody>
         </table>
       </div>

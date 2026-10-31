@@ -1,45 +1,248 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0b1110" />
-  <title>Northstar Warehouse Operations</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1b1d">
+  <title>VCP-OP Warehouse RF Scanner</title>
+  
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">N</div><div><strong>northstar</strong><span>warehouse ops</span></div></div>
-      <nav class="nav" aria-label="Primary navigation">
-        <button class="nav-item active"><span class="nav-icon">▦</span>Overview</button>
-        <button class="nav-item" data-scroll="inventory"><span class="nav-icon">▤</span>Inventory</button>
-        <button class="nav-item" data-scroll="orders"><span class="nav-icon">↗</span>Outbound orders</button>
-        <button class="nav-item" data-scroll="activity"><span class="nav-icon">◷</span>Activity log</button>
-      </nav>
-      <div class="sidebar-bottom"><div class="warehouse-select"><span class="status-dot"></span><div><small>ACTIVE WAREHOUSE</small><strong>Jakarta · WH-01</strong></div><span>⌄</span></div><div class="user"><div class="avatar">RK</div><div><strong>Rina K.</strong><span>Operations lead</span></div><span class="more">•••</span></div></div>
-    </aside>
-    <main class="main-content">
-      <header class="topbar"><div><p class="eyebrow">MONDAY, 24 JUNE 2024 · SHIFT A</p><h1>Good morning, Rina.</h1></div><div class="top-actions"><button class="icon-button" aria-label="Notifications">♧<span class="notification-dot"></span></button><button class="button button-dark" id="refreshButton">↻ <span>Refresh data</span></button></div></header>
-      <div id="feedback" class="feedback" role="status"></div>
-      <section class="kpi-grid" aria-label="Warehouse metrics">
-        <article class="kpi-card"><div class="kpi-label">Orders to fulfill <span class="trend up">↗ 12.4%</span></div><strong class="kpi-value" id="ordersMetric">—</strong><p>vs. yesterday</p><div class="sparkline"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
-        <article class="kpi-card"><div class="kpi-label">Items picked <span class="trend up">↗ 8.7%</span></div><strong class="kpi-value" id="pickedMetric">—</strong><p>of today&apos;s target</p><div class="progress"><span id="pickedProgress"></span></div><small id="pickedMeta">Loading progress</small></article>
-        <article class="kpi-card"><div class="kpi-label">Low stock items <span class="trend down">↘ 3.1%</span></div><strong class="kpi-value" id="lowStockMetric">—</strong><p>need attention</p><div class="stock-bars"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></article>
-        <article class="kpi-card"><div class="kpi-label">On-time dispatch <span class="trend up">↗ 1.8%</span></div><strong class="kpi-value">96.2%</strong><p>last 30 days</p><div class="mini-line"><span></span></div></article>
-      </section>
-      <section class="content-grid">
-        <article class="panel orders-panel" id="orders"><div class="panel-heading"><div><p class="eyebrow">FULFILLMENT QUEUE</p><h2>Orders needing attention</h2></div><button class="text-button" data-scroll="orders">View all ↗</button></div><div class="table-wrap"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>DESTINATION</th><th>ITEMS</th><th>STATUS</th><th>PRIORITY</th></tr></thead><tbody id="ordersBody"><tr><td colspan="6" class="loading">Loading orders...</td></tr></tbody></table></div></article>
-        <article class="panel activity-panel" id="activity"><div class="panel-heading"><div><p class="eyebrow">LIVE FEED</p><h2>Recent activity</h2></div><span class="live"><i></i> Live</span></div><div class="activity-list" id="activityList"><div class="loading">Loading activity...</div></div></article>
-      </section>
-      <section class="panel inventory-panel" id="inventory"><div class="panel-heading"><div><p class="eyebrow">STOCK CONTROL</p><h2>Inventory health</h2></div><button class="button button-light" id="inventoryFilter">All locations ⌄</button></div><div class="inventory-summary"><div class="inventory-stat"><span class="summary-dot green"></span><div><strong id="healthyCount">—</strong><small>Healthy stock</small></div></div><div class="inventory-stat"><span class="summary-dot amber"></span><div><strong id="warningCount">—</strong><small>Below reorder point</small></div></div><div class="inventory-stat"><span class="summary-dot red"></span><div><strong id="emptyCount">—</strong><small>Out of stock</small></div></div><div class="inventory-search"><span>⌕</span><input id="inventorySearch" placeholder="Search SKU or product" /></div></div><div class="table-wrap"><table><thead><tr><th>SKU</th><th>PRODUCT</th><th>LOCATION</th><th>ON HAND</th><th>REORDER POINT</th><th>STATUS</th></tr></thead><tbody id="inventoryBody"><tr><td colspan="6" class="loading">Loading inventory...</td></tr></tbody></table></div></section>
-      <footer><span>Northstar Warehouse OS · Connected to Supabase</span><span id="lastUpdated">Syncing...</span></footer>
-    </main>
+
+  <div id="screenFlashOverlay" class="flash-overlay"></div>
+
+  <!-- NAVIGATION TABS -->
+  <div class="tabs container">
+    <button id="tabPicking" class="tab-btn active">📦 1. PICKING & STAGING</button>
+    <button id="tabLoading" class="tab-btn">🚚 2. VALIDASI LOADING</button>
+    <a href="/Order-fulfillment/dashboard.html" class="tab-btn" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">📊 3. DASHBOARD</a>
   </div>
+  
+  <div id="viewPicking">
+
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo-chip"><img src="assets/logo-assa.png" alt="ASSA"></span>
+        <div class="brand-text"><strong>RF Scanner</strong><small>Outbound VCP-OP</small></div>
+      </div>
+      <span class="logo-chip logo-chip--cust"><img src="assets/logo-hms.png" alt="HM Sampoerna"></span>
+    </header>
+
+    <div class="card">
+      <div class="header-title">
+        <span>Pilih PO</span>
+        <div>
+          <button id="btnOpenLogs" class="btn btn-info btn-sm" style="display:none;">📋 Log</button>
+          <button id="btnCopyWA" class="btn btn-whatsapp btn-sm" style="display:none;">📱 Copy WA</button>
+          <a href="admin.html" class="nav-link" style="margin-left: 8px;">⚙️ Admin</a>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+        <label for="checkerNameInput">👤 NAMA CHECKER (PIC):</label>
+        <input type="text" id="checkerNameInput" placeholder="Ketik nama Anda di sini..." style="border: 2px solid #3182ce; font-weight: bold;" />
+      </div>
+
+      <div class="form-group">
+        <label for="whSelect">1. PILIH WAREHOUSE ID (WHID):</label>
+        <select id="whSelect"><option value="">-- Pilih WHID --</option></select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="weekSelect">2. Week:</label>
+          <select id="weekSelect" disabled><option value="">- Week -</option></select>
+        </div>
+        <div class="form-group">
+          <label for="dateSelect">3. Tanggal:</label>
+          <select id="dateSelect" disabled><option value="">- Date -</option></select>
+        </div>
+      </div>
+      
+      <div class="form-group" style="margin-top: 4px;">
+        <label for="ritSelect">4. Arrival Time (RIT Kedatangan):</label>
+        <select id="ritSelect" disabled><option value="">- Pilih Jam / RIT -</option></select>
+      </div>
+      
+      <div class="form-group" style="margin-top: 4px;">
+        <label for="poSelect">5. Target PO:</label>
+        <span id="btnToggleManual" class="toggle-manual">Input Manual PO?</span>
+        <select id="poSelect" disabled><option value="">-- Pilih Arrival Time Dahulu --</option></select>
+        <input type="text" id="manualPoInput" placeholder="Ketik Nomor PO Manual..." style="display: none; margin-top: 4px;" />
+      </div>
+      
+      <div id="poSummary" style="display: none; margin-top: 8px; font-size: 12px; background: #f7fafc; padding: 8px; border-radius: 6px;">
+        <div><strong>RIT:</strong> <span id="lblRit">-</span> | <strong>Blend:</strong> <span id="lblBlend">-</span> | <strong>Tgl:</strong> <span id="lblDate">-</span></div>
+        <div style="margin-top: 4px;">
+          <strong>Progress PO:</strong> <span id="lblProgressText">0 / 0 CT</span>
+          <div class="progress-bar-bg">
+            <div id="progressBar" class="progress-bar-fill"></div>
+          </div>
+        </div>
+        <div style="margin-top: 10px; display: flex; gap: 6px;">
+          <button id="btnOpenMonitoring" class="btn btn-primary btn-sm" style="flex: 1;">📸 Monitoring Staging</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scan-container">
+      <div class="scan-head">
+        <label for="barcodeInput">Scan barcode (31 karakter)</label>
+        <button type="button" id="btnKeyboard" class="btn-link">⌨ Keyboard</button>
+      </div>
+      <input type="text" id="barcodeInput" class="scan-input" autofocus autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="none" placeholder="Siap scan..." />
+    </div>
+
+    <div id="feedbackBanner" class="feedback-banner"></div>
+
+    <div class="card">
+      <div class="header-title" style="font-size: 13px;">Target Lot Progress</div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>LOT</th>
+              <th>TARGET</th>
+              <th>SCANNED</th>
+              <th>STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="lotTableBody">
+            <tr><td colspan="4" style="text-align:center; color:#a0aec0;">Pilih PO untuk menampilkan LOT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  
+  </div>
+
+  <!-- VIEW 2: VALIDASI LOADING OUTBOUND -->
+  <div id="viewLoading" style="display: none;" class="container">
+    <div class="card">
+      <div class="header-title" style="color: #dd6b20;">🚚 Validasi Muat Barang (Outbound)</div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>1. Tanggal Kedatangan:</label>
+          <select id="loadDateSelect"><option value="">- Date -</option></select>
+        </div>
+        <div class="form-group">
+          <label>2. Pilih RIT / Jam:</label>
+          <select id="loadRitSelect" disabled><option value="">- RIT -</option></select>
+        </div>
+      </div>
+
+      <div id="loadingPanel" style="display: none; margin-top: 10px;">
+        <div class="loading-summary">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span>Total Box di Staging:</span> <strong id="lblTotalToLoad">0 CT</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span>Tervalidasi Masuk Truk:</span> <strong id="lblTotalLoaded" style="color: #38a169;">0 CT</strong>
+          </div>
+          <div class="progress-bar-bg"><div id="loadProgressBar" class="progress-bar-fill" style="background:#dd6b20; width: 0%;"></div></div>
+        </div>
+        
+        <div class="scan-container" style="border-color: #dd6b20; background: #fffaf0;">
+          <label style="color: #dd6b20;">SCAN BOX MASUK TRUK (VALIDASI):</label>
+          <input type="text" id="barcodeInputLoad" class="scan-input" placeholder="Scan Serial Number..." style="border-color: #dd6b20;" autocomplete="off"/>
+        </div>
+
+        <button id="btnOpenDispatchNew" class="btn btn-success" style="width: 100%; padding: 12px; font-size: 13px;" disabled>
+          📸 AMBIL 4 FOTO & SELESAIKAN LOADING TRUK
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalBypass" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title" style="color: #c05621;">⚠️ DUPLICATE SN DETECTED</div>
+      <div id="modalBodyText" style="font-size: 14px; color: #4a5568; margin-bottom: 15px;">
+        Serial Number ini sudah pernah di-scan pada PO lain.
+      </div>
+      <div class="btn-group">
+        <button id="btnCancelScan" class="btn btn-cancel">BATAL (ESC)</button>
+        <button id="btnBypassScan" class="btn btn-bypass">BYPASS (ENTER)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalLogs" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>Log Scan PO: <span id="modalPoNum"></span></span>
+        <button id="btnCloseLogs" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <table>
+          <thead>
+            <tr><th>LOT</th><th>SN (Last 8)</th><th>KG</th><th>Aksi</th></tr>
+          </thead>
+          <tbody id="logTableBody">
+            <tr><td colspan="4" style="text-align:center;">Loading logs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalMonitoring" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>📸 Monitoring Staging (PO: <span id="monPoNum"></span>)</span>
+        <button id="btnCloseMonitoring" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nomor Kain Mori:</label>
+          <input type="text" id="monKainMori" placeholder="Contoh: KM-0812" />
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Total Box:</label><input type="number" id="monTotalBox" readonly style="background: #edf2f7;" /></div>
+          <div class="form-group"><label>Serrico Qty:</label><input type="number" id="monSerricoQty" readonly style="background: #edf2f7;" /></div>
+        </div>
+        <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
+        <div class="form-group"><label>📷 Foto Material + Kain Mori:</label><input type="file" id="photoMori" accept="image/*" capture="environment" /></div>
+        <div class="form-group"><label>📷 Foto Serrico (Luar):</label><input type="file" id="photoSerricoOut" accept="image/*" capture="environment" /></div>
+        <div class="form-group"><label>📷 Foto Serrico (Dalam):</label><input type="file" id="photoSerricoIn" accept="image/*" capture="environment" /></div>
+        <div class="form-group" style="margin-top: 15px;">
+          <button id="btnSubmitMonitoring" class="btn btn-primary" style="width: 100%;">💾 Simpan Evidence Monitoring</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalDispatch" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>🚚 Proses Loading (Outbound)</span>
+        <button id="btnCloseDispatch" class="btn btn-cancel btn-sm">X</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>No. RIT:</label><input type="text" id="dispRit" placeholder="Contoh: RIT 1" /></div>
+          <div class="form-group"><label>Plat Kendaraan:</label><input type="text" id="dispVehicle" placeholder="Contoh: B 1234 CD" /></div>
+        </div>
+        <hr style="margin: 10px 0; border: 0; border-top: 1px dashed #cbd5e1;">
+        <div class="form-row">
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Luar (BEFORE):</label><input type="file" id="photoTrapOutBefore" accept="image/*" capture="environment" /></div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Dalam (BEFORE):</label><input type="file" id="photoTrapInBefore" accept="image/*" capture="environment" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Luar (AFTER):</label><input type="file" id="photoTrapOutAfter" accept="image/*" capture="environment" /></div>
+          <div class="form-group"><label style="font-size: 11px;">📷 Trap Dalam (AFTER):</label><input type="file" id="photoTrapInAfter" accept="image/*" capture="environment" /></div>
+        </div>
+
+        <div class="form-group" style="margin-top: 15px;">
+          <button id="btnSubmitDispatch" class="btn btn-success" style="width: 100%;">🚀 Selesaikan Loading & Generate Link</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - VCP-OP Analytics</title>
+  
+  <link rel="stylesheet" href="style.css">
+  <!-- Include Supabase & SheetJS untuk Export Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body id="dashboardPage">
+
+  <div class="container" style="max-width: 1100px;">
+    
+    <!-- HEADER -->
+    <div class="card" style="padding: 12px 16px; margin-bottom: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: bold; color: #2c5282; font-size: 16px;">📊 VCP-OP Live Dashboard Analytics</span>
+        <div>
+          <a href="admin.html" class="nav-link" style="margin-right: 15px;">⚙️ Admin Panel</a>
+          <a href="index.html" class="nav-link">📱 RF Scanner &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="statusBanner" class="banner"></div>
+
+    <!-- FILTER SECTION -->
+    <div class="card" style="background: #ebf8ff; border: 1px solid #bee3f8;">
+      <div class="form-row">
+        <div class="form-group" style="flex: 1;">
+          <label>Warehouse (WHID):</label>
+          <select id="dashWhSelect"><option value="ALL">-- SEMUA WAREHOUSE --</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Tanggal Kedatangan:</label>
+          <select id="dashDateSelect"><option value="">- Loading Dates -</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label>Filter RITase:</label>
+          <select id="dashRitSelect" disabled><option value="ALL">-- SEMUA RIT --</option></select>
+        </div>
+        <div class="form-group" style="flex: 0.5; display: flex; align-items: flex-end;">
+          <button id="btnRefreshDash" class="btn btn-primary" style="width: 100%; padding: 9px;">🔄 Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCORECARD SECTION -->
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+      <div class="card" style="flex: 1; text-align: center; border-left: 4px solid #718096; padding: 15px;">
+        <h2 id="scoreTarget" style="color: #2d3748; font-size: 24px; margin-bottom: 5px;">0</h2>
+        <span style="font-size: 11px; font-weight: bold; color: #718096; text-transform: uppercase;">📦 Target CT</span>
+      </div>
+      <div class="card" style="flex: 1; text-align: center; border-left: 4px solid #3182ce; padding: 15px;">
+        <h2 id="scorePicked" style="color: #2b6cb0; font-size: 24px; margin-bottom: 5px;">0</h2>
+        <span style="font-size: 11px; font-weight: bold; color: #718096; text-transform: uppercase;">🛒 In-Staging</span>
+      </div>
+      <div class="card" style="flex: 1; text-align: center; border-left: 4px solid #dd6b20; padding: 15px;">
+        <h2 id="scoreLoaded" style="color: #c05621; font-size: 24px; margin-bottom: 5px;">0</h2>
+        <span style="font-size: 11px; font-weight: bold; color: #718096; text-transform: uppercase;">🚚 Loaded</span>
+      </div>
+      <div class="card" style="flex: 1; text-align: center; border-left: 4px solid #38a169; padding: 15px;">
+        <h2 id="scorePct" style="color: #2f855a; font-size: 24px; margin-bottom: 5px;">0%</h2>
+        <span style="font-size: 11px; font-weight: bold; color: #718096; text-transform: uppercase;">📈 Load Progress</span>
+      </div>
+    </div>
+
+    <!-- DATA TABLE SECTION -->
+    <div class="card">
+      <div class="header-title" style="margin-bottom: 12px;">
+        <span>Live Status PO Tracker</span>
+        <button id="btnExportDash" class="btn btn-success btn-sm">📥 Export Excel</button>
+      </div>
+      
+      <div class="table-container" style="max-height: 400px;">
+        <table>
+          <thead style="background: #f7fafc; position: sticky; top: 0; z-index: 10;">
+            <tr>
+              <th>PO Number</th>
+              <th>WHID</th>
+              <th>RIT</th>
+              <th>Blend</th>
+              <th>Target (CT)</th>
+              <th>Picked (CT)</th>
+              <th>Loaded (CT)</th>
+              <th style="text-align: center;">Status Realtime</th>
+            </tr>
+          </thead>
+          <tbody id="dashTableBody">
+            <tr><td colspan="8" style="text-align:center; padding: 20px;">Silakan pilih Tanggal Kedatangan untuk memuat data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
